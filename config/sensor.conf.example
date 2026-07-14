@@ -1,0 +1,9 @@
+# The command is executed directly; no shell is involved.
+sensor_command=/usr/local/libexec/read-temperature-humidity
+# Add one sensor_arg line for each argument, in order.
+# sensor_arg=--bus
+# sensor_arg=1
+
+poll_interval_seconds=60
+command_timeout_milliseconds=5000
+maximum_output_bytes=4096

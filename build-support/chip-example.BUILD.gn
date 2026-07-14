@@ -1,0 +1,38 @@
+import("//build_overrides/chip.gni")
+import("${chip_root}/build/chip/tools.gni")
+import("${chip_root}/src/app/chip_data_model.gni")
+
+assert(chip_build_tools)
+
+chip_data_model("temperature-humidity-data-model") {
+  zap_file = "//data-model/temperature-humidity.zap"
+  is_server = true
+}
+
+executable("matter-temperature-humidity-sensor") {
+  sources = [
+    "//include/CHIPProjectAppConfig.h",
+    "//include/CommandJsonSensorProvider.h",
+    "//include/Config.h",
+    "//include/MatterReporter.h",
+    "//include/SensorPoller.h",
+    "//include/SensorProvider.h",
+    "//include/SensorReading.h",
+    "//src/CommandJsonSensorProvider.cpp",
+    "//src/Config.cpp",
+    "//src/MatterReporter.cpp",
+    "//src/SensorPoller.cpp",
+    "//src/SensorReading.cpp",
+    "//src/main.cpp",
+  ]
+
+  deps = [
+    ":temperature-humidity-data-model",
+    "${chip_root}/examples/platform/linux:app-main",
+    "${chip_root}/src/lib",
+  ]
+
+  include_dirs = [ "//include" ]
+  cflags = [ "-Wconversion" ]
+  output_dir = root_out_dir
+}

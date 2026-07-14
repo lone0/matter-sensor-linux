@@ -1,0 +1,10 @@
+/out/
+/sysroot/
+/third_party/connectedhomeip/.environment/
+/third_party/connectedhomeip/out/
+/third_party/connectedhomeip/.cache/
+/data-model/temperature-humidity.zap
+/data-model/temperature-humidity.matter
+/third_party/connectedhomeip/examples/matter-temperature-humidity-sensor/
+*.log
+*.swp

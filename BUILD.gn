@@ -1,0 +1,3 @@
+group("default") {
+  deps = [ "//third_party/connectedhomeip/examples/matter-temperature-humidity-sensor:matter-temperature-humidity-sensor" ]
+}
