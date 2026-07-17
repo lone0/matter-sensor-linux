@@ -54,7 +54,34 @@ cross_version=$("$cross_gcc" -dumpversion | cut -d. -f1)
 
 cd "$project_root"
 toolchain_wrapper_dir=$(mktemp -d)
-trap 'rm -rf "$toolchain_wrapper_dir"' EXIT
+chip_root="$project_root/third_party/connectedhomeip"
+chip_patch_applied=false
+
+cleanup() {
+    if [[ $chip_patch_applied == true ]]; then
+        git -C "$chip_root" apply --reverse "$chip_patch"
+    fi
+    rm -rf "$toolchain_wrapper_dir"
+}
+
+if [[ $GN_TARGET_CPU == riscv64 ]]; then
+    chip_patch="$project_root/patches/connectedhomeip/0001-add-linux-riscv64-gcc-toolchain.patch"
+    [[ -r $chip_patch ]] || {
+        echo "missing connectedhomeip riscv64 patch: $chip_patch" >&2
+        exit 1
+    }
+    if git -C "$chip_root" apply --reverse --check "$chip_patch" 2>/dev/null; then
+        :
+    elif git -C "$chip_root" apply --check "$chip_patch"; then
+        git -C "$chip_root" apply "$chip_patch"
+        chip_patch_applied=true
+    else
+        echo "connectedhomeip riscv64 patch does not apply; rebase it for the current submodule revision" >&2
+        exit 1
+    fi
+fi
+trap cleanup EXIT
+
 export DEBIAN_SYSROOT="$sysroot"
 export DEBIAN_CROSS_GCC="$(command -v "$cross_gcc")"
 export DEBIAN_CROSS_GXX="$(command -v "$cross_gxx")"

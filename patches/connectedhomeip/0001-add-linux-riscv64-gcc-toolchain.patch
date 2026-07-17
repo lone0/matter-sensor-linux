@@ -1,0 +1,72 @@
+From b7f8e4ce12a1aa1044e9028a681922119c239a65 Mon Sep 17 00:00:00 2001
+From: Zhen XIN <lone.zen6@gmail.com>
+Date: Sat, 18 Jul 2026 02:06:44 +0800
+Subject: [PATCH] Add Linux riscv64 GCC toolchain
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+---
+ build/config/compiler/BUILD.gn |  4 ++--
+ build/config/riscv.gni         |  2 +-
+ build/toolchain/linux/BUILD.gn | 14 ++++++++++++++
+ 3 files changed, 17 insertions(+), 3 deletions(-)
+
+diff --git a/build/config/compiler/BUILD.gn b/build/config/compiler/BUILD.gn
+index 1d386a7f..cc7a9aab 100644
+--- a/build/config/compiler/BUILD.gn
++++ b/build/config/compiler/BUILD.gn
+@@ -64,7 +64,7 @@ if (current_cpu == "arm" || current_cpu == "arm64") {
+   import("${build_root}/config/arm.gni")
+ } else if (current_cpu == "x86" || current_cpu == "x86_64") {
+   import("${build_root}/config/x86.gni")
+-} else if (current_cpu == "riscv") {
++} else if (current_cpu == "riscv" || current_cpu == "riscv64") {
+   import("${build_root}/config/riscv.gni")
+ }
+ 
+@@ -144,7 +144,7 @@ config("abi_default") {
+         ]
+       }
+     }
+-    if (current_cpu == "riscv") {
++    if (current_cpu == "riscv" || current_cpu == "riscv64") {
+       if (riscv_arch != "") {
+         cflags += [ "-march=${riscv_arch}" ]
+       }
+diff --git a/build/config/riscv.gni b/build/config/riscv.gni
+index c7843d8b..796e69dd 100644
+--- a/build/config/riscv.gni
++++ b/build/config/riscv.gni
+@@ -14,7 +14,7 @@
+ 
+ import("//build_overrides/build.gni")
+ 
+-if (current_cpu == "riscv") {
++if (current_cpu == "riscv" || current_cpu == "riscv64") {
+   declare_args() {
+     # Build file to import for RISCV defaults.
+     riscv_platform_config = ""
+diff --git a/build/toolchain/linux/BUILD.gn b/build/toolchain/linux/BUILD.gn
+index abc61ab2..ef954a0b 100644
+--- a/build/toolchain/linux/BUILD.gn
++++ b/build/toolchain/linux/BUILD.gn
+@@ -91,3 +91,17 @@ gcc_toolchain("linux_arm64_clang") {
+     is_clang = true
+   }
+ }
++
++gcc_toolchain("linux_riscv64_gcc") {
++  _toolprefix = "riscv64-linux-gnu-"
++
++  cc = "${_toolprefix}gcc"
++  cxx = "${_toolprefix}g++"
++  ar = "${_toolprefix}ar"
++
++  toolchain_args = {
++    current_os = "linux"
++    current_cpu = "riscv64"
++    is_clang = false
++  }
++}
+-- 
+2.43.0
+

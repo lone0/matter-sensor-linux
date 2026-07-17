@@ -170,7 +170,11 @@ remain as arm64 compatibility wrappers.
 
 CHIP's supplied Linux GN toolchains support `x64`, `x86`, `arm`, and `arm64`.
 This repository also adds Linux `riscv64` support to its connectedhomeip
-submodule. For one of these, create
+submodule through
+`patches/connectedhomeip/0001-add-linux-riscv64-gcc-toolchain.patch`. The
+build script applies this patch only for the riscv64 profile and reverses it
+after the build, so the submodule remains at its upstream revision. For one of
+these, create
 `configs/architectures/<profile>.conf` by copying `arm64.conf`, `armhf.conf`,
 or `riscv64.conf`:
 
