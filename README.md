@@ -89,6 +89,16 @@ The command is invoked with `execvp`, not `sh -c`; `sensor_arg` lines provide
 arguments without shell parsing. See `scripts/stub-sensor.sh` for a minimal
 fixture.
 
+For development, set `SENSOR_STUB_LOG` to a writable file before starting the
+application. The stub appends one timestamped line for every poll while keeping
+stdout limited to its JSON reading:
+
+```sh
+SENSOR_STUB_LOG=/tmp/matter-sensor-polls.log \
+  ./out/host/matter-temperature-humidity-sensor --sensor-config ./sensor.conf
+tail -f /tmp/matter-sensor-polls.log
+```
+
 For a direct I2C, serial, or other in-process implementation, begin with:
 
 | Purpose | Location |
