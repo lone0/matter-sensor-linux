@@ -256,24 +256,38 @@ new project profile. Then:
 
 ## Deploy
 
-Copy the target binary to `/usr/local/bin/matter-temperature-humidity-sensor`,
-install the sensor configuration at
-`/etc/matter-temperature-humidity-sensor.conf`, and install the systemd unit:
+Deployment has two layers:
+
+1. Install the generic Matter application and its standard systemd service.
+2. Install a platform sensor command and its matching configuration before
+   enabling the service.
+
+On the running target, install the generic binary and service:
 
 ```sh
 sudo useradd --system \
   --home /var/lib/matter-temperature-humidity-sensor \
   --shell /usr/sbin/nologin \
   matter-sensor
+sudo install -D -m 0755 /path/to/matter-temperature-humidity-sensor \
+  /usr/local/bin/matter-temperature-humidity-sensor
 sudo install -m 0644 deploy/matter-temperature-humidity-sensor.service \
   /etc/systemd/system/
 sudo systemctl daemon-reload
+```
+
+For a generic command sensor, copy its executable and install a configuration
+at `/etc/matter-temperature-humidity-sensor.conf` based on
+`runtime-config/sensor.conf.example`. Then enable the service:
+
+```sh
 sudo systemctl enable --now matter-temperature-humidity-sensor
 ```
 
-For the SG2002 RTC information backend, follow the separate
-[`platforms/sg2002`](platforms/sg2002) installation guide. Its service unit
-grants `CAP_SYS_RAWIO` to the external `devmem` command.
+For SG2002, do not enable the generic service yet. Follow the
+[`platforms/sg2002`](platforms/sg2002) deployment guide to install the RTC
+reader or its fixed-value debug stub, the matching configuration, and the
+SG2002 service unit that grants `CAP_SYS_RAWIO`.
 
 The target network must permit IPv6 and mDNS/DNS-SD between the controller and
 the device. Live-sensor and controller end-to-end validation remains dependent
