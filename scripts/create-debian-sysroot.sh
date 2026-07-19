@@ -8,7 +8,7 @@ if [[ ${1:-} == "--profile" ]]; then
         echo "usage: $0 --profile <architecture-profile> <sysroot-directory> [suite]" >&2
         exit 2
     }
-    profile_file="$project_root/configs/architectures/$2.conf"
+    profile_file="$project_root/build-profiles/$2.conf"
     [[ -r $profile_file ]] || {
         echo "unknown architecture profile: $2" >&2
         exit 1

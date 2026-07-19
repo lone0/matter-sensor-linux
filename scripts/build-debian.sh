@@ -8,7 +8,7 @@ fi
 
 project_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 profile=$1
-profile_file="$project_root/configs/architectures/$profile.conf"
+profile_file="$project_root/build-profiles/$profile.conf"
 [[ -r $profile_file ]] || {
     echo "unknown architecture profile: $profile" >&2
     exit 1

@@ -29,7 +29,7 @@ sensor command or custom SensorProvider
   the two standard measurement attributes.
 
 The repository uses profile-driven Debian cross builds. Architecture facts live
-in `configs/architectures/*.conf`; common scripts create sysroots and build any
+in `build-profiles/*.conf`; common scripts create sysroots and build any
 selected profile. This keeps sysroots and outputs separate per architecture.
 
 ## Quick start
@@ -55,7 +55,7 @@ The host binary is written to:
 out/host/matter-temperature-humidity-sensor
 ```
 
-For development, copy `config/sensor.conf.example`, set `sensor_command` to
+For development, copy `runtime-config/sensor.conf.example`, set `sensor_command` to
 the absolute path of `scripts/stub-sensor.sh`, and run:
 
 ```sh
@@ -175,7 +175,7 @@ submodule through
 build script applies this patch only for the riscv64 profile and reverses it
 after the build, so the submodule remains at its upstream revision. For one of
 these, create
-`configs/architectures/<profile>.conf` by copying `arm64.conf`, `armhf.conf`,
+`build-profiles/<profile>.conf` by copying `arm64.conf`, `armhf.conf`,
 or `riscv64.conf`:
 
 ```sh
