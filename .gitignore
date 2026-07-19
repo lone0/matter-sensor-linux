@@ -1,4 +1,5 @@
 /out/
+# Locally supplied development sysroots are external build inputs.
 /sysroot/
 /third_party/connectedhomeip/.environment/
 /third_party/connectedhomeip/out/

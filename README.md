@@ -1,9 +1,10 @@
 # Matter Temperature and Humidity Sensor for Linux
 
-Turn a Debian 12 Linux device, such as an Ethernet-connected Raspberry Pi, into
-a native Matter temperature and relative-humidity sensor. The application is
-derived from Project CHIP/connectedhomeip's Linux architecture and has no Snap
-or Snapcraft dependency.
+Turn a Linux device, such as an Ethernet-connected Raspberry Pi, into a native
+Matter temperature and relative-humidity sensor. The application is derived
+from Project CHIP/connectedhomeip's Linux architecture and has no Snap or
+Snapcraft dependency. It supports every CPU architecture supported by CHIP's
+Linux SDK.
 
 It exposes the standard Temperature Measurement and Relative Humidity
 Measurement server clusters on endpoint `1`. Commissioning is on-network over
@@ -28,9 +29,9 @@ sensor command or custom SensorProvider
 - `MatterReporter` marshals updates to CHIP's application thread and writes
   the two standard measurement attributes.
 
-The repository uses profile-driven Debian cross builds. Architecture facts live
-in `build-profiles/*.conf`; common scripts create sysroots and build any
-selected profile. This keeps sysroots and outputs separate per architecture.
+The repository uses profile-driven Linux cross builds. Architecture facts live
+in `build-profiles/*.conf`; a selected profile builds against an existing target
+development sysroot supplied by the board image, SDK, or toolchain owner.
 
 ## Quick start
 
@@ -43,7 +44,7 @@ sudo apt update
 sudo apt install -y \
   pkg-config libssl-dev libavahi-client-dev libdbus-1-dev \
   libglib2.0-dev libglib2.0-dev-bin \
-  mmdebstrap debian-archive-keyring jq
+  jq
 
 make test
 make host
@@ -114,11 +115,12 @@ Implement `SensorProvider::Read`, return a validated `SensorReading`, and
 select the new provider in `src/main.cpp`. Normal sensor ports do not need to
 change `MatterReporter.cpp`.
 
-## Debian 12 profile builds
+## Cross builds with an external development sysroot
 
-Install the GCC 12 cross compiler for the chosen architecture. GCC 12 is used
-because newer Ubuntu cross compilers can introduce GLIBC requirements newer than
-Debian 12 supports.
+Install the cross compiler selected by the architecture profile. The target
+sysroot must come from the exact board image, vendor SDK, or distribution build
+environment used for deployment. It must contain target development headers and
+libraries, not only the runtime root filesystem.
 
 ```sh
 # arm64
@@ -128,41 +130,71 @@ sudo apt install -y gcc-12-aarch64-linux-gnu g++-12-aarch64-linux-gnu
 sudo apt install -y gcc-12-arm-linux-gnueabihf g++-12-arm-linux-gnueabihf
 ```
 
-Create the Debian 12 sysroot and build using a profile:
+Build by naming the profile and the external sysroot:
 
 ```sh
-make sysroot ARCH=arm64
-make build ARCH=arm64
+make build ARCH=arm64 SYSROOT=/opt/board-sdk/sysroot
 
 # Or:
-make sysroot ARCH=armhf
-make build ARCH=armhf
+make build ARCH=armhf SYSROOT=/opt/board-sdk/sysroot
 
-# riscv64 with the supplied QEMU sysroot and GCC 12 cross compiler
+# riscv64 with an existing sysroot and GCC 12 cross compiler
 make build ARCH=riscv64 SYSROOT=/mnt/storage/riscv64-qemu-sysroot \
   CROSS_GCC=/usr/bin/riscv64-linux-gnu-gcc-12 \
   CROSS_GXX=/usr/bin/riscv64-linux-gnu-g++-12
 ```
 
+The cross-build script verifies the supplied sysroot has the target include and
+multiarch library directories, then derives its GLIBC ceiling from target
+`libc.so.6`. It rejects a binary requiring a newer GLIBC version.
+
 The result is placed at:
 
 ```text
-out/debian12-<debian-architecture>/matter-temperature-humidity-sensor
+out/<profile-output-directory>/matter-temperature-humidity-sensor
 ```
 
-The generic build script wraps the Ubuntu compiler so headers and runtime
-libraries come from the Debian sysroot. It then rejects a binary requiring
-GLIBC newer than Debian 12's `GLIBC_2.36`.
+Without `OUTPUT_DIR` in the profile, the output directory is
+`out/linux-<DEBIAN_ARCH>`.
 
-Equivalent direct commands are:
+Equivalent direct command:
 
 ```sh
-./scripts/create-debian-sysroot.sh --profile arm64 sysroot/debian12-arm64 bookworm
-./scripts/build-debian.sh arm64 sysroot/debian12-arm64
+./scripts/build-debian.sh arm64 /opt/board-sdk/sysroot
 ```
 
-The older `create-debian12-sysroot.sh` and `build-debian12-arm64.sh` scripts
-remain as arm64 compatibility wrappers.
+The older `build-debian12-arm64.sh` script remains as an arm64 compatibility
+wrapper and also requires an existing sysroot.
+
+The parent-owned connectedhomeip RISC-V toolchain patch is applied only for a
+`riscv64` build and automatically reversed afterward. Exercise that lifecycle
+with an external RISC-V development sysroot:
+
+```sh
+make test-riscv64 SYSROOT=/path/to/riscv64-development-sysroot
+```
+
+## SG2002 Debian 13 preparation
+
+The SG2002 DHT11 integration is an external command backend in
+[`platforms/sg2002`](platforms/sg2002). It adds BusyBox `devmem`, RTC register
+handling, a privileged service unit, and board-specific deployment guidance
+without changing the generic application.
+
+There is no SG2002 build profile or build flag. Build the standard Linux
+`riscv64` binary, then select the SG2002 integration on the board by installing
+its command configuration and service:
+
+```sh
+make build ARCH=riscv64 SYSROOT=/path/to/riscv64-sysroot
+cd platforms/sg2002
+sudo ./install-dependencies.sh --install
+sudo ./probe-rtc-info.sh
+```
+
+The SG2002 configuration sets `sensor_command` to `read-rtc-info.sh`; other
+deployments can use the same binary with any executable that emits the standard
+sensor JSON.
 
 ## Porting guide
 
@@ -188,30 +220,28 @@ GCC_VERSION=12
 
 | Field | Meaning |
 | --- | --- |
-| `DEBIAN_ARCH` | Argument passed to `mmdebstrap`; also names the output directory. |
+| `DEBIAN_ARCH` | Target Debian architecture; used for default output naming. |
 | `GN_TARGET_CPU` | CHIP GN CPU identifier. |
 | `GNU_TRIPLET` | Prefix of the Ubuntu cross compiler binaries. |
 | `DEBIAN_MULTIARCH` | Debian sysroot include and library directory name. |
-| `GCC_VERSION` | Cross compiler and Debian `libstdc++-<version>-dev` version. |
+| `GCC_VERSION` | Required host cross-compiler version. |
 | `OUTPUT_DIR` | Optional output directory suffix; used by external sysroots. |
-| `GLIBC_MAX_VERSION` | Optional maximum supported GLIBC version; defaults to Debian 12's `2.36`. |
+| `GLIBC_MAX_VERSION` | Optional deployment GLIBC ceiling; otherwise derived from the supplied sysroot. |
 
-Install the matching compiler, then run:
+Install the matching compiler and obtain a development sysroot, then run:
 
 ```sh
-make sysroot ARCH=<profile>
-make build ARCH=<profile>
+make build ARCH=<profile> SYSROOT=/path/to/target-development-sysroot
 ```
 
-The profile builder creates `sysroot/debian12-<DEBIAN_ARCH>` and
-`out/debian12-<DEBIAN_ARCH>`, so multiple architectures can coexist.
+The build never creates or modifies the sysroot.
 
 ### Add a completely new CPU family
 
-First confirm Debian 12 has packages for the desired architecture. A CPU family
-outside the repository's existing `x64`, `x86`, `arm`, `arm64`, and `riscv64`
-Linux GN support requires a connectedhomeip build port, not merely a new project
-profile. Then:
+First confirm that CHIP's Linux SDK supports the desired CPU family. A CPU
+family outside the repository's existing `x64`, `x86`, `arm`, `arm64`, and
+`riscv64` Linux GN support requires a connectedhomeip build port, not merely a
+new project profile. Then:
 
 1. Add the architecture profile described above.
 2. Add a matching GNU toolchain target in
@@ -219,9 +249,10 @@ profile. Then:
 3. Ensure the new GN toolchain uses the profile's `GNU_TRIPLET`.
 4. Map the architecture to a supported `GN_TARGET_CPU`, or extend CHIP's build
    configuration for the new CPU.
-5. Run `make sysroot ARCH=<profile>` and `make build ARCH=<profile>`.
-6. Confirm the result using `file` and `readelf --version-info`; its highest
-   `GLIBC_*` requirement must not exceed `GLIBC_2.36`.
+5. Obtain an external development sysroot for the target.
+6. Run `make build ARCH=<profile> SYSROOT=/path/to/target-development-sysroot`.
+7. Confirm the result using `file` and `readelf --version-info`; its highest
+   `GLIBC_*` requirement must not exceed the target sysroot's `libc.so.6`.
 
 ## Deploy
 
@@ -239,6 +270,10 @@ sudo install -m 0644 deploy/matter-temperature-humidity-sensor.service \
 sudo systemctl daemon-reload
 sudo systemctl enable --now matter-temperature-humidity-sensor
 ```
+
+For the SG2002 RTC information backend, follow the separate
+[`platforms/sg2002`](platforms/sg2002) installation guide. Its service unit
+grants `CAP_SYS_RAWIO` to the external `devmem` command.
 
 The target network must permit IPv6 and mDNS/DNS-SD between the controller and
 the device. Live-sensor and controller end-to-end validation remains dependent

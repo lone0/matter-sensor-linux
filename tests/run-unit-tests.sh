@@ -13,3 +13,4 @@ g++ -std=c++17 -Wall -Wextra -Werror -pedantic -pthread \
     "$project_root/tests/SensorProviderTest.cpp" \
     -o "$output_dir/sensor-provider-test"
 (cd "$project_root" && "$output_dir/sensor-provider-test")
+bash "$project_root/platforms/sg2002/tests/test-read-rtc-info.sh"

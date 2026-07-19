@@ -5,7 +5,6 @@
 #include <cstdlib>
 #include <iostream>
 #include <string>
-#include <vector>
 
 namespace {
 
@@ -57,5 +56,6 @@ int main()
     matter_sensor::CommandJsonSensorProvider oversized({ "/bin/sh", "-c", "printf '%0200d' 0" },
                                                        std::chrono::seconds(1), 32);
     Require(!oversized.Read(reading, error), "large command output must fail");
+
     return 0;
 }

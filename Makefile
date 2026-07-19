@@ -1,19 +1,20 @@
 ARCH ?= arm64
-SUITE ?= bookworm
-SYSROOT ?= sysroot/debian12-$(ARCH)
+SYSROOT ?=
 
-.PHONY: all build host sysroot test
+.PHONY: all build host test test-riscv64
 
 all: build
 
 build:
+	@test -n "$(SYSROOT)" || { echo "set SYSROOT to an existing target development sysroot" >&2; exit 2; }
 	./scripts/build-debian.sh $(ARCH) $(SYSROOT)
 
 host:
 	./scripts/build-host.sh
 
-sysroot:
-	./scripts/create-debian-sysroot.sh --profile $(ARCH) $(SYSROOT) $(SUITE)
-
 test:
 	./tests/run-unit-tests.sh
+
+test-riscv64:
+	@test -n "$(SYSROOT)" || { echo "set SYSROOT to an existing riscv64 development sysroot" >&2; exit 2; }
+	./tests/run-riscv64-build-test.sh $(SYSROOT)

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ $# -lt 1 || $# -gt 2 ]]; then
-    echo "usage: $0 <architecture-profile> [sysroot-directory]" >&2
+if [[ $# -ne 2 ]]; then
+    echo "usage: $0 <architecture-profile> <existing-development-sysroot>" >&2
     exit 2
 fi
 
@@ -16,10 +16,13 @@ profile_file="$project_root/build-profiles/$profile.conf"
 
 # Profiles are project-maintained shell assignments, not user-provided input.
 source "$profile_file"
-sysroot=${2:-"$project_root/sysroot/debian12-$DEBIAN_ARCH"}
-sysroot=$(realpath "$sysroot")
-[[ -d $sysroot/usr/include ]] || {
-    echo "not a usable Debian sysroot: $sysroot" >&2
+[[ -e $2 ]] || {
+    echo "target development sysroot does not exist: $2" >&2
+    exit 1
+}
+sysroot=$(realpath -e "$2")
+[[ -d $sysroot/usr/include && -d $sysroot/usr/lib/$DEBIAN_MULTIARCH ]] || {
+    echo "not a usable target development sysroot: $sysroot" >&2
     exit 1
 }
 
@@ -99,16 +102,34 @@ set -u
 ./scripts/generate-data-model.sh
 ./scripts/prepare-chip-overlay.sh
 
-output_dir="out/${OUTPUT_DIR:-debian12-$DEBIAN_ARCH}"
+output_dir="out/${OUTPUT_DIR:-linux-$DEBIAN_ARCH}"
 gn gen "$output_dir" --args="import(\"//args.gni\") target_os=\"linux\" target_cpu=\"$GN_TARGET_CPU\" sysroot=\"$sysroot\" system_libdir=\"lib/$DEBIAN_MULTIARCH\" pkg_config=\"pkg-config\" is_debug=false"
 ninja -C "$output_dir" matter-temperature-humidity-sensor
 
 binary="$output_dir/matter-temperature-humidity-sensor"
 file "$binary"
 required_glibc=$(readelf --version-info "$binary" | grep -oE 'GLIBC_[0-9.]+' | sort -Vu | tail -n1 || true)
-maximum_glibc_version=${GLIBC_MAX_VERSION:-2.36}
+maximum_glibc_version=${GLIBC_MAX_VERSION:-}
+if [[ -z $maximum_glibc_version ]]; then
+    target_libc=
+    for candidate in "$sysroot/lib/$DEBIAN_MULTIARCH/libc.so.6" "$sysroot/usr/lib/$DEBIAN_MULTIARCH/libc.so.6"; do
+        if [[ -r $candidate ]]; then
+            target_libc=$candidate
+            break
+        fi
+    done
+    [[ -n $target_libc ]] || {
+        echo "target development sysroot does not contain libc.so.6 for $DEBIAN_MULTIARCH" >&2
+        exit 1
+    }
+    maximum_glibc_version=$(readelf --version-info "$target_libc" | grep -oE 'GLIBC_[0-9.]+' | sort -Vu | tail -n1 | sed 's/^GLIBC_//')
+    [[ -n $maximum_glibc_version ]] || {
+        echo "cannot determine the GLIBC version from target sysroot libc.so.6" >&2
+        exit 1
+    }
+fi
 if [[ -n $required_glibc ]] && ! dpkg --compare-versions "${required_glibc#GLIBC_}" le "$maximum_glibc_version"; then
     echo "binary requires $required_glibc, newer than profile maximum GLIBC_$maximum_glibc_version" >&2
     exit 1
 fi
-printf 'maximum required glibc version: %s\n' "${required_glibc:-none}"
+printf 'target GLIBC version: %s; maximum required GLIBC version: %s\n' "$maximum_glibc_version" "${required_glibc:-none}"
