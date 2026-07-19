@@ -35,6 +35,7 @@ bool ParseApplicationArguments(int argc, char * argv[], std::string & configurat
         }
         chipArguments.push_back(argv[index]);
     }
+    chipArguments.push_back(nullptr);
     return true;
 }
 
@@ -70,7 +71,7 @@ int main(int argc, char * argv[])
         return 1;
     }
 
-    if (ChipLinuxAppInit(static_cast<int>(chipArguments.size()), chipArguments.data()) != 0)
+    if (ChipLinuxAppInit(static_cast<int>(chipArguments.size() - 1), chipArguments.data()) != 0)
     {
         return 1;
     }

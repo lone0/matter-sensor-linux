@@ -9,19 +9,11 @@ set -euo pipefail
 : "${DEBIAN_MULTIARCH:?DEBIAN_MULTIARCH must be set}"
 
 case "$(basename -- "$0")" in
-    *g++)
-        compiler=$DEBIAN_CROSS_GXX
-        ;;
-    *)
-        compiler=$DEBIAN_CROSS_GCC
-        ;;
+    *g++) compiler=$DEBIAN_CROSS_GXX ;;
+    *)    compiler=$DEBIAN_CROSS_GCC ;;
 esac
 
 gcc_library_directory="$DEBIAN_SYSROOT/usr/lib/gcc/$DEBIAN_TARGET_TRIPLET/$DEBIAN_CROSS_VERSION"
-[[ -d $gcc_library_directory ]] || {
-    echo "missing GCC $DEBIAN_CROSS_VERSION runtime in Debian sysroot: $gcc_library_directory" >&2
-    exit 1
-}
 
 exec "$compiler" \
     -isystem "$DEBIAN_SYSROOT/usr/include/$DEBIAN_MULTIARCH" \

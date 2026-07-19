@@ -72,15 +72,16 @@ set -u
 ./scripts/generate-data-model.sh
 ./scripts/prepare-chip-overlay.sh
 
-output_dir="out/debian12-$DEBIAN_ARCH"
+output_dir="out/${OUTPUT_DIR:-debian12-$DEBIAN_ARCH}"
 gn gen "$output_dir" --args="import(\"//args.gni\") target_os=\"linux\" target_cpu=\"$GN_TARGET_CPU\" sysroot=\"$sysroot\" system_libdir=\"lib/$DEBIAN_MULTIARCH\" pkg_config=\"pkg-config\" is_debug=false"
 ninja -C "$output_dir" matter-temperature-humidity-sensor
 
 binary="$output_dir/matter-temperature-humidity-sensor"
 file "$binary"
 required_glibc=$(readelf --version-info "$binary" | grep -oE 'GLIBC_[0-9.]+' | sort -Vu | tail -n1 || true)
-if [[ -n $required_glibc ]] && ! dpkg --compare-versions "${required_glibc#GLIBC_}" le 2.36; then
-    echo "binary requires $required_glibc, newer than Debian 12's GLIBC_2.36" >&2
+maximum_glibc_version=${GLIBC_MAX_VERSION:-2.36}
+if [[ -n $required_glibc ]] && ! dpkg --compare-versions "${required_glibc#GLIBC_}" le "$maximum_glibc_version"; then
+    echo "binary requires $required_glibc, newer than profile maximum GLIBC_$maximum_glibc_version" >&2
     exit 1
 fi
 printf 'maximum required glibc version: %s\n' "${required_glibc:-none}"
