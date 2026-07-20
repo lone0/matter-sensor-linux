@@ -194,7 +194,8 @@ sudo ./probe-rtc-info.sh
 
 The SG2002 configuration sets `sensor_command` to `read-rtc-info.sh`; other
 deployments can use the same binary with any executable that emits the standard
-sensor JSON.
+sensor JSON. The platform guide also documents its optional 8051 LED/DHT11
+firmware, board-side GPIO preflight, and loader procedure.
 
 ## Porting guide
 
