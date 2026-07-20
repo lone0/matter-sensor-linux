@@ -62,8 +62,7 @@ Build the firmware on the Ubuntu host. The host package supplies `sdcc` and
 
 ```sh
 sudo apt install -y sdcc
-make platform-sg2002-8051
-make platform-sg2002-8051-loader
+make platform PLATFORM=sg2002
 # Output: platforms/sg2002/8051/build/mars_mcu_fw.bin
 # Output: platforms/sg2002/8051/build/8051_up
 ```
@@ -89,7 +88,7 @@ ownership. Stop if the preflight fails, or if
 select verified free header pins and rebuild with:
 
 ```sh
-make platform-sg2002-8051 DHT_GPIO_PIN=<free-dht-gpioa-line> \
+make platform PLATFORM=sg2002 DHT_GPIO_PIN=<free-dht-gpioa-line> \
   LED_GPIO_PIN=<free-led-gpioa-line>
 ```
 
@@ -98,8 +97,9 @@ selected DHT GPIO through a 4.7–10 kOhm pull-up to 3.3 V. Connect the LED and
 a series resistor to the separate LED GPIO. Never use a 5 V pull-up on either
 GPIO, and never put the LED and DHT11 on the same line.
 
-`make platform-sg2002-8051-loader` produces a statically linked RISC-V
-`8051_up` loader.
+`make platform PLATFORM=sg2002` validates the platform's shell sensor readers,
+builds the 8051 firmware, and produces a statically linked RISC-V `8051_up`
+loader.
 Copy both generated files to the Nano:
 
 ```sh
@@ -162,5 +162,6 @@ sudo systemctl enable --now matter-temperature-humidity-sensor
 
 The repository's `make test` runs both reader tests. They use
 `tests/fake-busybox.sh` instead of physical MMIO, so they do not require an
-SG2002 board or `/dev/mem`. `make platform-sg2002-8051` separately compiles
-the 8051 image and rejects an image over the 8 KiB RTC-SRAM limit.
+SG2002 board or `/dev/mem`. `make platform PLATFORM=sg2002` validates the
+sensor reader scripts, compiles the 8051 image, and rejects an image over the
+8 KiB RTC-SRAM limit.

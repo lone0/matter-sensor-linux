@@ -7,5 +7,6 @@
 /data-model/temperature-humidity.zap
 /data-model/temperature-humidity.matter
 /third_party/connectedhomeip/examples/matter-temperature-humidity-sensor/
+/platforms/sg2002/8051/build/
 *.log
 *.swp
