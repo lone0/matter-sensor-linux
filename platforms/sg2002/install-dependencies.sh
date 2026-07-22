@@ -28,7 +28,7 @@ done
     exit 1
 }
 
-packages=(avahi-daemon busybox libavahi-client3 libnss-mdns dbus libssl3t64 libglib2.0-0t64 libdbus-1-3 libstdc++6 libatomic1)
+packages=(avahi-daemon busybox gpiod libavahi-client3 libnss-mdns dbus libssl3t64 libglib2.0-0t64 libdbus-1-3 libstdc++6 libatomic1)
 missing=()
 for package in "${packages[@]}"; do
     dpkg-query -W -f='${db:Status-Status}' "$package" 2>/dev/null | grep -qx installed || missing+=("$package")
