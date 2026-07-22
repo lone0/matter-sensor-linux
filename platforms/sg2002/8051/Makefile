@@ -5,6 +5,8 @@ TARGET_CC ?= riscv64-linux-gnu-gcc-12
 BUILD_DIR := build
 FIRMWARE := $(BUILD_DIR)/mars_mcu_fw.bin
 IHX := $(BUILD_DIR)/matter_sensor_8051.ihx
+FAKE_FIRMWARE := $(BUILD_DIR)/mars_mcu_fw_fake.bin
+FAKE_IHX := $(BUILD_DIR)/matter_sensor_8051_fake.ihx
 LOADER := $(BUILD_DIR)/8051_up
 CODE_LIMIT := 8192
 
@@ -19,9 +21,11 @@ SDCC_CFLAGS := -mmcs51 --model-large --code-loc 0x0000 --code-size 0x2000 \
 	-DLED_GPIO_BASE=$(LED_GPIO_BASE) -DLED_GPIO_PIN=$(LED_GPIO_PIN)
 LOADER_CFLAGS := -std=c11 -O2 -Wall -Wextra -Werror -static
 
-.PHONY: all clean check-loader-tools check-size check-tools loader
+.PHONY: all clean check-loader-tools check-size check-tools fake loader
 
-all: check-tools $(FIRMWARE) check-size
+all: check-tools $(FIRMWARE) $(FAKE_FIRMWARE) check-size
+
+fake: check-tools $(FAKE_FIRMWARE) check-size
 
 check-tools:
 	@command -v "$(SDCC)" >/dev/null || { echo "SDCC compiler not found; install the host package: sudo apt install sdcc" >&2; exit 2; }
@@ -39,13 +43,21 @@ $(IHX): firmware.c | $(BUILD_DIR)
 $(FIRMWARE): $(IHX)
 	$(SDOBJCOPY) -I ihex -O binary $< $@
 
-check-size: $(FIRMWARE)
-	@size=$$(wc -c <"$(FIRMWARE)"); \
-	if [ "$$size" -gt "$(CODE_LIMIT)" ]; then \
-		echo "$(FIRMWARE) is $$size bytes; SG2002 RTC SRAM limit is $(CODE_LIMIT)" >&2; \
-		exit 1; \
-	fi; \
-	echo "$(FIRMWARE): $$size / $(CODE_LIMIT) bytes"
+$(FAKE_IHX): firmware.c | $(BUILD_DIR)
+	$(SDCC) $(SDCC_CFLAGS) -DFAKE_SENSOR=1 -o $@ $<
+
+$(FAKE_FIRMWARE): $(FAKE_IHX)
+	$(SDOBJCOPY) -I ihex -O binary $< $@
+
+check-size: $(FIRMWARE) $(FAKE_FIRMWARE)
+	@for image in $^; do \
+		size=$$(wc -c <"$$image"); \
+		if [ "$$size" -gt "$(CODE_LIMIT)" ]; then \
+			echo "$$image is $$size bytes; SG2002 RTC SRAM limit is $(CODE_LIMIT)" >&2; \
+			exit 1; \
+		fi; \
+		echo "$$image: $$size / $(CODE_LIMIT) bytes"; \
+	done
 
 loader: check-loader-tools $(LOADER)
 

@@ -17,11 +17,15 @@ typedef unsigned long uint32_t;
 #endif
 
 #ifndef LED_GPIO_PIN
-#define LED_GPIO_PIN 3
+#define LED_GPIO_PIN 20
 #endif
 
 #ifndef LED_GPIO_BASE
 #define LED_GPIO_BASE 0x05021000UL
+#endif
+
+#ifndef FAKE_SENSOR
+#define FAKE_SENSOR 0
 #endif
 
 #define DHT_GPIO_BASE 0x03020000UL
@@ -47,6 +51,7 @@ typedef unsigned long uint32_t;
 #define RTC_INFO3 0x05026028UL
 
 #define STATUS_RUNNING 0x424C4E4BUL /* "BLNK" */
+#define STATUS_FAKE 0x46414B45UL /* "FAKE" */
 #define STATUS_NO_RESPONSE 0x45523031UL /* "ER01" */
 #define STATUS_TIMING 0x45523032UL /* "ER02" */
 #define STATUS_CHECKSUM 0x45523033UL /* "ER03" */
@@ -56,6 +61,12 @@ typedef unsigned long uint32_t;
 #define DHT_RESPONSE_DELAY_US 40U
 #define DHT_BIT_SAMPLE_US 40U
 #define DHT_WAIT_POLLS 255U
+
+#if FAKE_SENSOR
+#define STATUS_PUBLISHING STATUS_FAKE
+#else
+#define STATUS_PUBLISHING STATUS_RUNNING
+#endif
 
 __sfr __at (0xE4) r51_rd0;
 __sfr __at (0xE5) r51_rd1;
@@ -240,25 +251,35 @@ static uint8_t publish_reading(const uint8_t bytes[5], uint32_t *sequence)
         ++*sequence;
     }
     robot_write(RTC_INFO3, *sequence);
-    robot_write(RTC_INFO0, STATUS_RUNNING);
+    robot_write(RTC_INFO0, STATUS_PUBLISHING);
     return 1;
 }
 
 void main(void)
 {
     uint8_t bytes[5];
+#if !FAKE_SENSOR
     uint8_t result;
+#endif
     uint8_t led_on = 0;
     uint32_t sequence = 0;
 
     gpio_write(LED_GPIO_BASE, LED_GPIO_PIN, 0);
     gpio_output(LED_GPIO_BASE, LED_GPIO_PIN);
     gpio_input(DHT_GPIO_BASE, DHT_GPIO_PIN);
-    robot_write(RTC_INFO0, STATUS_RUNNING);
+    robot_write(RTC_INFO0, STATUS_PUBLISHING);
 
     for (;;) {
         gpio_write(LED_GPIO_BASE, LED_GPIO_PIN, led_on);
         led_on = (uint8_t) !led_on;
+#if FAKE_SENSOR
+        bytes[0] = 56;
+        bytes[1] = 78;
+        bytes[2] = 23;
+        bytes[3] = 45;
+        bytes[4] = (uint8_t) (bytes[0] + bytes[1] + bytes[2] + bytes[3]);
+        publish_reading(bytes, &sequence);
+#else
         result = dht11_read(bytes);
         if (result == 1U) {
             robot_write(RTC_INFO0, STATUS_NO_RESPONSE);
@@ -269,6 +290,7 @@ void main(void)
         } else if (!publish_reading(bytes, &sequence)) {
             robot_write(RTC_INFO0, STATUS_RANGE);
         }
+#endif
         delay_ms(1000);
     }
 }

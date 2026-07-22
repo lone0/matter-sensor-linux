@@ -22,6 +22,7 @@ This produces:
 
 ```text
 platforms/sg2002/8051/build/mars_mcu_fw.bin
+platforms/sg2002/8051/build/mars_mcu_fw_fake.bin
 platforms/sg2002/8051/build/8051_up
 ```
 
@@ -48,6 +49,7 @@ Copy the firmware, loader, and GPIO preparation script to the Nano:
 
 ```sh
 scp platforms/sg2002/8051/build/mars_mcu_fw.bin root@nano:/root/
+scp platforms/sg2002/8051/build/mars_mcu_fw_fake.bin root@nano:/root/
 scp platforms/sg2002/8051/build/8051_up root@nano:/root/
 scp platforms/sg2002/8051/prepare-gpios.sh root@nano:/root/
 
@@ -96,9 +98,19 @@ with:
 journalctl -u matter-temperature-humidity-sensor -b
 ```
 
-For commissioning without the 8051/DHT11, install `read-fake-sensor.sh` and
-`sensor-fake.conf.example` instead. The fake reader reports `23.45 C` and
-`56.78 %`.
+For commissioning through the production RTC reader without a DHT11, install
+the fake 8051 image in place of the production image, then restart the service:
+
+```sh
+install -m 0644 /root/mars_mcu_fw_fake.bin \
+  /usr/local/lib/matter-sensor-sg2002/mars_mcu_fw.bin
+systemctl restart matter-temperature-humidity-sensor
+```
+
+The fake firmware publishes `23.45 C` and `56.78 %` through `RTC_INFO2` and
+`RTC_INFO3`, exactly as production firmware does. Preserve the real image
+elsewhere before replacing it, then reinstall it and restart the service to
+return to DHT11 acquisition.
 
 ## Linux and 8051 interaction
 
@@ -138,15 +150,15 @@ All commands in this section are manual diagnostics; the service only invokes
 | --- | --- |
 | `probe-rtc-info.sh` | Human-readable board report: system, `/dev/mem`, BusyBox `devmem`, RTC registers, decoded reading, and relevant kernel messages. It is not used by the service. |
 | `read-rtc-info.sh` | Production `sensor_command`; emits exactly one JSON object after a stable RTC read. |
-| `read-fake-sensor.sh` | Fixed-value commissioning/debug sensor command. |
 | `prepare-gpios.sh` | Checks DHT GPIOA26 ownership and configures GPIOP20's pinmux only when the SPI-NOR safety conditions hold. |
 | `8051_up` | Holds the 8051 in reset, loads `mars_mcu_fw.bin` into RTC SRAM, and releases reset. It is safe to rerun serially. |
+| `mars_mcu_fw_fake.bin` | Fake 8051 firmware image for RTC/Matter commissioning without a DHT11. |
 
 ### RTC information registers
 
 | Register | Address | Meaning |
 | --- | ---: | --- |
-| `RTC_INFO0` | `0x0502601c` | Firmware status: `BLNK` (`0x424c4e4b`), `ER01` no DHT response, `ER02` timing, `ER03` checksum, `ER04` range. |
+| `RTC_INFO0` | `0x0502601c` | Firmware status: `BLNK` (`0x424c4e4b`), `FAKE` (`0x46414b45`), `ER01` no DHT response, `ER02` timing, `ER03` checksum, `ER04` range. |
 | `RTC_INFO1` | `0x05026020` | Reserved command register. |
 | `RTC_INFO2` | `0x05026024` | Packed measurement: signed temperature centi-degrees C in bits `15:0`, unsigned humidity centi-percent in bits `31:16`. |
 | `RTC_INFO3` | `0x05026028` | Nonzero publication sequence. |
@@ -226,11 +238,9 @@ to input, and relies on the external 3.3 V pull-up.
 | `install-dependencies.sh` | Installs and checks SG2002 Matter runtime dependencies and BusyBox `devmem`. |
 | `matter-temperature-humidity-sensor.service` | Service unit granting the RTC reader `CAP_SYS_RAWIO`. |
 | `read-rtc-info.sh` | Production RTC reader. |
-| `read-fake-sensor.sh` | Fixed-value commissioning reader. |
 | `sensor.conf.example` | Configuration selecting the RTC reader. |
-| `sensor-fake.conf.example` | Configuration selecting the fake reader. |
 | `probe-rtc-info.sh` | Manual RTC diagnostic report. |
-| `8051/` | SDCC firmware, loader source, and GPIO preparation script. |
+| `8051/` | Production and fake SDCC firmware, loader source, and GPIO preparation script. |
 
 ## Tests
 

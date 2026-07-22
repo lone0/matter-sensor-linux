@@ -3,7 +3,7 @@
 all: reader firmware loader
 
 reader:
-	bash -n read-rtc-info.sh read-fake-sensor.sh probe-rtc-info.sh
+	bash -n read-rtc-info.sh probe-rtc-info.sh
 
 firmware:
 	$(MAKE) -C 8051
