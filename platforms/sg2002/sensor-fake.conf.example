@@ -1,5 +1,0 @@
-# Fixed values for commissioning and Matter reporting tests before 8051 firmware is available.
-sensor_command=/usr/local/libexec/matter-sensor-sg2002/read-fake-sensor.sh
-poll_interval_seconds=5
-command_timeout_milliseconds=1000
-maximum_output_bytes=128

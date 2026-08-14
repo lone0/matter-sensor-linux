@@ -176,25 +176,25 @@ make test-riscv64 SYSROOT=/path/to/riscv64-development-sysroot
 
 ## SG2002 Debian 13 preparation
 
-The SG2002 DHT11 integration is an external command backend in
+The SG2002 SHT31 integration is an external command backend in
 [`platforms/sg2002`](platforms/sg2002). It adds BusyBox `devmem`, RTC register
-handling, a privileged service unit, and board-specific deployment guidance
+handling, an I2C3 systemd drop-in, and board-specific deployment guidance
 without changing the generic application.
 
 There is no SG2002 build profile or build flag. Build the standard Linux
-`riscv64` binary, then select the SG2002 integration on the board by installing
-its command configuration and service:
+`riscv64` binary. Install it with the generic remote installer, then install
+the SG2002 platform payload:
 
 ```sh
 make build ARCH=riscv64 SYSROOT=/path/to/riscv64-sysroot
-cd platforms/sg2002
-sudo ./install-dependencies.sh --install
-sudo ./probe-rtc-info.sh
+./deploy/deploy-main-program-over-ssh.sh 192.168.28.48
+./platforms/sg2002/deploy-sg2002-platform-over-ssh.sh 192.168.28.48
 ```
 
 The SG2002 configuration sets `sensor_command` to `read-rtc-info.sh`; other
 deployments can use the same binary with any executable that emits the standard
-sensor JSON.
+sensor JSON. The platform guide documents production SHT31 firmware, fixed
+debug readings, the optional GPIO bridge benchmark, and I2C3 handoff.
 
 ## Porting guide
 
@@ -276,6 +276,9 @@ sudo install -m 0644 deploy/matter-temperature-humidity-sensor.service \
 sudo systemctl daemon-reload
 ```
 
+The service passes `--KVS /var/lib/matter-temperature-humidity-sensor/chip-kvs`
+so Matter fabric credentials persist across restarts and reboots.
+
 For a generic command sensor, copy its executable and install a configuration
 at `/etc/matter-temperature-humidity-sensor.conf` based on
 `runtime-config/sensor.conf.example`. Then enable the service:
@@ -284,10 +287,9 @@ at `/etc/matter-temperature-humidity-sensor.conf` based on
 sudo systemctl enable --now matter-temperature-humidity-sensor
 ```
 
-For SG2002, do not enable the generic service yet. Follow the
-[`platforms/sg2002`](platforms/sg2002) deployment guide to install the RTC
-reader or its fixed-value debug stub, the matching configuration, and the
-SG2002 service unit that grants `CAP_SYS_RAWIO`.
+For SG2002, install the generic application first, then follow the
+[`platforms/sg2002`](platforms/sg2002) guide. The platform installer adds a
+drop-in that grants `CAP_SYS_RAWIO`, prepares I2C3, and loads SHT31 firmware.
 
 The target network must permit IPv6 and mDNS/DNS-SD between the controller and
 the device. Live-sensor and controller end-to-end validation remains dependent

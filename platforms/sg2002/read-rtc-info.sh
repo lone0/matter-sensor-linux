@@ -3,6 +3,7 @@ set -euo pipefail
 
 readonly rtc_info_measurement=0x05026024
 readonly rtc_info_sequence=0x05026028
+readonly stable_read_attempts=3
 devmem=${SG2002_DEVMEM:-busybox}
 
 read_register() {
@@ -29,9 +30,15 @@ format_centi() {
     printf '%s%d.%02d' "$sign" "$((value / 100))" "$((value % 100))"
 }
 
-sequence_before=$(read_register "$rtc_info_sequence")
-measurement=$(read_register "$rtc_info_measurement")
-sequence_after=$(read_register "$rtc_info_sequence")
+for ((attempt = 1; attempt <= stable_read_attempts; ++attempt)); do
+    sequence_before=$(read_register "$rtc_info_sequence")
+    measurement=$(read_register "$rtc_info_measurement")
+    sequence_after=$(read_register "$rtc_info_sequence")
+
+    if ((sequence_before != 0 && sequence_before == sequence_after)); then
+        break
+    fi
+done
 
 if ((sequence_before == 0 || sequence_before != sequence_after)); then
     echo "8051 has not published a stable RTC information reading" >&2

@@ -1,87 +1,133 @@
-# SG2002 RTC Information Backend
+# SG2002 SHT31 Matter Backend
 
-This directory is the SG2002-specific DHT11 integration for the generic Linux
-Matter application. The main application remains configured with its normal
-`sensor_command` interface and has no SG2002 MMIO code.
+This platform integration keeps Matter platform-neutral: the Linux application
+executes `read-rtc-info.sh`, which reads measurements published by the SG2002
+RTC-domain 8051.
 
-## Contents
+## Firmware images
 
-| File | Purpose |
-| --- | --- |
-| `install-dependencies.sh` | Installs and checks SG2002 Matter runtime dependencies and BusyBox `devmem`. |
-| `probe-rtc-info.sh` | Reads the RTC information registers on the board before deploying the RTC reader. |
-| `read-rtc-info.sh` | Production sensor command that reads 8051-published DHT11 values. |
-| `sensor.conf.example` | Configuration selecting `read-rtc-info.sh`. |
-| `read-fake-sensor.sh` | Fixed-value sensor command for commissioning and reporting tests. |
-| `sensor-fake.conf.example` | Configuration selecting `read-fake-sensor.sh`. |
-| `matter-temperature-humidity-sensor.service` | SG2002 service unit with the raw-MMIO capability required by the RTC reader. |
-| `tests/test-read-rtc-info.sh` | Host test for RTC reader decoding and stable-sequence behavior. |
-| `tests/fake-busybox.sh` | Deterministic `busybox devmem` fixture used only by the RTC reader test. |
-| `tests/test-read-fake-sensor.sh` | Host test for the fixed-value reader output. |
+Exactly three 8051 firmware sources are retained:
 
-`read-rtc-info.sh` uses BusyBox's `devmem` applet to read the RTC-domain 8051
-registers:
+| Source | Binary | Purpose | Built by `make` |
+| --- | --- | --- | --- |
+| `sht31-firmware.c` | `mars_mcu_fw_sht31.bin` | Production SHT31 temperature/humidity acquisition over I2C3. | Yes |
+| `fake-firmware.c` | `mars_mcu_fw_fake.bin` | Fixed `23.45 C` and `56.78 %` debug readings. | Yes |
+| `robot-read-benchmark.c` | `robot_read_benchmark.bin` | GPIO bridge timing diagnostic. | No; use `make benchmark`. |
 
-| Register | Address | Use |
-| --- | ---: | --- |
-| `RTC_INFO2` | `0x05026024` | Temperature in signed centi-degrees C (`15:0`), humidity in unsigned centi-percent (`31:16`) |
-| `RTC_INFO3` | `0x05026028` | Nonzero publication sequence |
+The SSH installer installs all three images. The default
+`matter-temperature-humidity-sensor.service` loads
+`mars_mcu_fw_sht31.bin`; loading the fake image requires the explicit service
+change described below.
 
-The 8051 must write `RTC_INFO2` before incrementing `RTC_INFO3`. The command
-reads sequence, measurement, and sequence again; it exits unsuccessfully if
-the sequence is zero or changes, so the generic sensor poller preserves the
-last valid Matter value.
+## Deploy
 
-## Deployment
-
-First complete the generic binary installation in the repository root
-[`README.md`](../../README.md#deploy). Then choose one of the following sensor
-deployments before enabling the service. Run `install-dependencies.sh` and
-`probe-rtc-info.sh` from the copied `platforms/sg2002` directory on the board.
-
-### RTC information reader
-
-Use this after the 8051 DHT11 firmware publishes readings to `RTC_INFO2` and
-`RTC_INFO3`.
+First install the main Matter application and its generic systemd service:
 
 ```sh
-sudo ./install-dependencies.sh --install
-sudo ./probe-rtc-info.sh
-
-sudo install -D -m 0755 read-rtc-info.sh \
-  /usr/local/libexec/matter-sensor-sg2002/read-rtc-info.sh
-sudo install -m 0644 sensor.conf.example \
-  /etc/matter-temperature-humidity-sensor.conf
+./deploy/deploy-main-program-over-ssh.sh 192.168.28.48
 ```
 
-### Fixed-value debug reader
-
-Use this to commission and verify Matter reporting before the 8051/DHT11
-firmware is available. It reports `23.45 C` and `56.78 %`.
+Pass an already-built Matter binary as its second argument when it is not at
+`out/linux-riscv64/matter-temperature-humidity-sensor`. Then build and deploy
+only the SG2002 platform integration:
 
 ```sh
-sudo install -D -m 0755 read-fake-sensor.sh \
-  /usr/local/libexec/matter-sensor-sg2002/read-fake-sensor.sh
-sudo install -m 0644 sensor-fake.conf.example \
-  /etc/matter-temperature-humidity-sensor.conf
+sudo apt install -y sdcc
+make platform PLATFORM=sg2002
+./platforms/sg2002/deploy-sg2002-platform-over-ssh.sh 192.168.28.48
 ```
 
-### Enable the SG2002 service
+Wire the SHT31 at 3.3 V:
 
-Both sensor choices use the SG2002 service unit. It grants `CAP_SYS_RAWIO` to
-the unprivileged service account so the RTC reader's child `busybox devmem`
-command can read `/dev/mem`; it is also safe to use with the fixed-value
-reader.
+```text
+GPIOP22 / IIC3_SCL -> SHT31 SCL
+GPIOP23 / IIC3_SDA -> SHT31 SDA
+3.3 V              -> SHT31 VCC
+GND                -> SHT31 GND
+```
+
+Use suitable 3.3 V I2C pull-ups when the breakout board does not provide
+them. The production image expects the default SHT31 address `0x44`.
+
+The platform installer installs a systemd drop-in. It hands AP I2C3 from Linux
+to the 8051 on each service start. It unbinds
+Linux device `4030000.i2c`, selects the GPIOP22/23 IIC3 function, restores the
+I2C clock/reset, and then loads the SHT31 image. This handoff is reset by a
+reboot. Disable `&i2c3` in the board device tree for permanent 8051 ownership.
+
+## Target commands
+
+Run the full disruptive hardware test, which prepares I2C3, loads production
+firmware, and checks readings:
 
 ```sh
-sudo install -m 0644 matter-temperature-humidity-sensor.service \
-  /etc/systemd/system/matter-temperature-humidity-sensor.service
+sudo /usr/local/libexec/matter-sensor-sg2002/test-sht31-hardware.sh
+```
+
+Run a non-disruptive health check of the already-running production firmware:
+
+```sh
+sudo /usr/local/libexec/matter-sensor-sg2002/check-sht31-readings.sh
+```
+
+The SHT31 reports `I2CO` when publishing. `I2C!` records the DesignWare abort
+source in `RTC_INFO1`; `CRC!` and `RNG!` identify invalid sensor frames and
+converted values.
+
+## Using fixed debug readings
+
+The fake image is installed at:
+
+```text
+/usr/local/lib/matter-sensor-sg2002/mars_mcu_fw_fake.bin
+```
+
+To switch deliberately, edit
+`/etc/systemd/system/matter-temperature-humidity-sensor.service` and change
+only this `ExecStartPre` image path:
+
+```ini
+.../8051_up /usr/local/lib/matter-sensor-sg2002/mars_mcu_fw_fake.bin
+```
+
+Then apply it:
+
+```sh
 sudo systemctl daemon-reload
-sudo systemctl enable --now matter-temperature-humidity-sensor
+sudo systemctl restart matter-temperature-humidity-sensor
 ```
+
+Restore `mars_mcu_fw_sht31.bin` in the same line and restart to return to
+physical sensor readings.
+
+## Benchmark firmware
+
+Build the benchmark only when diagnosing the 8051 AP-GPIO bridge:
+
+```sh
+make -C platforms/sg2002/8051 benchmark
+```
+
+Temporarily load `robot_read_benchmark.bin` with `8051_up`. It reports `BMOK`
+in `RTC_INFO0`; `RTC_INFO1` is calibrated Timer0 ticks/second, `RTC_INFO2` is
+the total bridge-read ticks, and `RTC_INFO3` is the read count. Reload the
+production SHT31 image after the benchmark.
+
+## RTC publication ABI
+
+| Register | Address | Meaning |
+| --- | ---: | --- |
+| `RTC_INFO0` | `0x0502601c` | Firmware status. |
+| `RTC_INFO1` | `0x05026020` | SHT31 abort source for `I2C!`; otherwise reserved. |
+| `RTC_INFO2` | `0x05026024` | Signed temperature centi-degrees C in bits `15:0`; humidity centi-percent in bits `31:16`. |
+| `RTC_INFO3` | `0x05026028` | Nonzero publication sequence. |
+
+The writer publishes `RTC_INFO2` before incrementing `RTC_INFO3`.
+`read-rtc-info.sh` accepts only a stable sequence/measurement/sequence read.
 
 ## Tests
 
-The repository's `make test` runs both reader tests. They use
-`tests/fake-busybox.sh` instead of physical MMIO, so they do not require an
-SG2002 board or `/dev/mem`.
+`make test` runs host-side reader and SHT31-health-check tests. `make platform
+PLATFORM=sg2002` syntax-checks platform scripts and builds the production and
+fake images plus the RISC-V loader. All firmware images are constrained to the
+8 KiB RTC SRAM limit.

@@ -6,3 +6,9 @@ chmod +x "$platform_root/read-rtc-info.sh" "$platform_root/tests/fake-busybox.sh
 
 output=$(SG2002_DEVMEM="$platform_root/tests/fake-busybox.sh" "$platform_root/read-rtc-info.sh")
 [[ $output == '{"temperature_c":23.45,"humidity_percent":56.78}' ]]
+
+state_dir=$(mktemp -d)
+trap 'rm -rf "$state_dir"' EXIT
+output=$(FAKE_BUSYBOX_SEQUENCE_STATE="$state_dir" \
+    SG2002_DEVMEM="$platform_root/tests/fake-busybox.sh" "$platform_root/read-rtc-info.sh")
+[[ $output == '{"temperature_c":23.45,"humidity_percent":56.78}' ]]
