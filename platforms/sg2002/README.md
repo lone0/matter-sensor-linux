@@ -14,7 +14,8 @@ Exactly three 8051 firmware sources are retained:
 | `fake-firmware.c` | `mars_mcu_fw_fake.bin` | Fixed `23.45 C` and `56.78 %` debug readings. | Yes |
 | `robot-read-benchmark.c` | `robot_read_benchmark.bin` | GPIO bridge timing diagnostic. | No; use `make benchmark`. |
 
-The SSH installer installs all three images. The default
+The SSH installer installs the production and fake images. Build and load the
+benchmark manually only when diagnosing GPIO bridge timing. The default
 `matter-temperature-humidity-sensor.service` loads
 `mars_mcu_fw_sht31.bin`; loading the fake image requires the explicit service
 change described below.
@@ -55,63 +56,11 @@ Linux device `4030000.i2c`, selects the GPIOP22/23 IIC3 function, restores the
 I2C clock/reset, and then loads the SHT31 image. This handoff is reset by a
 reboot. Disable `&i2c3` in the board device tree for permanent 8051 ownership.
 
-## Target commands
+## Troubleshooting
 
-Run the full disruptive hardware test, which prepares I2C3, loads production
-firmware, and checks readings:
-
-```sh
-sudo /usr/local/libexec/matter-sensor-sg2002/test-sht31-hardware.sh
-```
-
-Run a non-disruptive health check of the already-running production firmware:
-
-```sh
-sudo /usr/local/libexec/matter-sensor-sg2002/check-sht31-readings.sh
-```
-
-The SHT31 reports `I2CO` when publishing. `I2C!` records the DesignWare abort
-source in `RTC_INFO1`; `CRC!` and `RNG!` identify invalid sensor frames and
-converted values.
-
-## Using fixed debug readings
-
-The fake image is installed at:
-
-```text
-/usr/local/lib/matter-sensor-sg2002/mars_mcu_fw_fake.bin
-```
-
-To switch deliberately, edit
-`/etc/systemd/system/matter-temperature-humidity-sensor.service` and change
-only this `ExecStartPre` image path:
-
-```ini
-.../8051_up /usr/local/lib/matter-sensor-sg2002/mars_mcu_fw_fake.bin
-```
-
-Then apply it:
-
-```sh
-sudo systemctl daemon-reload
-sudo systemctl restart matter-temperature-humidity-sensor
-```
-
-Restore `mars_mcu_fw_sht31.bin` in the same line and restart to return to
-physical sensor readings.
-
-## Benchmark firmware
-
-Build the benchmark only when diagnosing the 8051 AP-GPIO bridge:
-
-```sh
-make -C platforms/sg2002/8051 benchmark
-```
-
-Temporarily load `robot_read_benchmark.bin` with `8051_up`. It reports `BMOK`
-in `RTC_INFO0`; `RTC_INFO1` is calibrated Timer0 ticks/second, `RTC_INFO2` is
-the total bridge-read ticks, and `RTC_INFO3` is the read count. Reload the
-production SHT31 image after the benchmark.
+See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for an on-board diagnostic flow,
+starting with non-disruptive service and sensor checks before progressing to
+full hardware setup, fixed-reading isolation, and GPIO bridge benchmarking.
 
 ## RTC publication ABI
 

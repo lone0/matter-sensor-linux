@@ -13,14 +13,27 @@ if ! [[ $target_ip =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]]; then
     echo "target must be an IPv4 address: $target_ip" >&2
     exit 2
 fi
-for command in make scp ssh; do
+for command in scp ssh; do
     command -v "$command" >/dev/null || {
         echo "missing required host command: $command" >&2
         exit 2
     }
 done
 
-make -C "$script_dir/8051" all benchmark loader
+for artifact in \
+    "$script_dir/8051/build/8051_up" \
+    "$script_dir/8051/build/mars_mcu_fw_sht31.bin" \
+    "$script_dir/8051/build/mars_mcu_fw_fake.bin"; do
+    [[ -f $artifact ]] || {
+        echo "missing platform artifact: $artifact" >&2
+        echo "build first: make -C $script_dir/8051 all benchmark loader" >&2
+        exit 2
+    }
+done
+[[ -x $script_dir/8051/build/8051_up ]] || {
+    echo "8051 loader is not executable: $script_dir/8051/build/8051_up" >&2
+    exit 2
+}
 
 target="root@$target_ip"
 remote_stage=$(ssh "$target" 'set -eu
@@ -53,7 +66,6 @@ scp \
     "$script_dir/8051/build/8051_up" \
     "$script_dir/8051/build/mars_mcu_fw_fake.bin" \
     "$script_dir/8051/build/mars_mcu_fw_sht31.bin" \
-    "$script_dir/8051/build/robot_read_benchmark.bin" \
     "$target:$remote_stage/"
 
 ssh "$target" "bash -s -- '$remote_stage'" <<'REMOTE'
@@ -82,7 +94,6 @@ install -m 0755 "$stage/prepare-i2c3.sh" "$libexec/prepare-i2c3.sh"
 install -m 0755 "$stage/8051_up" "$libexec/8051_up"
 install -D -m 0644 "$stage/mars_mcu_fw_fake.bin" "$firmware_dir/mars_mcu_fw_fake.bin"
 install -m 0644 "$stage/mars_mcu_fw_sht31.bin" "$firmware_dir/mars_mcu_fw_sht31.bin"
-install -m 0644 "$stage/robot_read_benchmark.bin" "$firmware_dir/robot_read_benchmark.bin"
 install -D -m 0644 "$stage/sensor.conf.example" /etc/matter-temperature-humidity-sensor.conf
 install -D -m 0644 "$stage/matter-temperature-humidity-sensor-sg2002.conf" \
     /etc/systemd/system/"$service".d/sg2002.conf

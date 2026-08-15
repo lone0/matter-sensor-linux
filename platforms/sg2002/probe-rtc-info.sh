@@ -15,9 +15,12 @@ readonly status_benchmark_running=0x424d524e
 readonly status_benchmark_complete=0x424d4f4b
 readonly status_benchmark_overflow=0x4f56464c
 
-output=${1:-sg2002-rtc-info-probe.txt}
 devmem=${SG2002_DEVMEM:-busybox}
-exec >"$output" 2>&1
+
+if (($# != 0)); then
+    echo "usage: $0" >&2
+    exit 2
+fi
 
 read_register() {
     local value
@@ -137,4 +140,4 @@ else
 fi
 
 echo "== Relevant kernel messages =="
-dmesg | grep -Ei 'rtc|8051|mcu' || true
+dmesg 2>/dev/null | grep -Ei 'rtc|8051|mcu' || true

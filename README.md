@@ -188,6 +188,7 @@ the SG2002 platform payload:
 ```sh
 make build ARCH=riscv64 SYSROOT=/path/to/riscv64-sysroot
 ./deploy/deploy-main-program-over-ssh.sh 192.168.28.48
+make platform PLATFORM=sg2002
 ./platforms/sg2002/deploy-sg2002-platform-over-ssh.sh 192.168.28.48
 ```
 
