@@ -1,4 +1,4 @@
-ARCH ?= arm64
+ARCH ?= riscv64
 SYSROOT ?=
 
 .PHONY: all build host platform test test-riscv64

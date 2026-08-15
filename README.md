@@ -66,6 +66,58 @@ the absolute path of `scripts/stub-sensor.sh`, and run:
 The CHIP startup output contains the onboarding payload for on-network
 commissioning.
 
+## Cross Build
+
+Cross-building requires an existing **target development rootfs**, not merely
+runtime libraries. It must be for the deployment CPU architecture and include
+`/usr/include`, `/usr/lib/<target-multiarch>`, and the target development
+packages `libglib2.0-dev`, `libssl-dev`, `libavahi-client-dev`,
+`libdbus-1-dev`, and `libglib2.0-dev-bin`.
+
+The built binary cannot require a newer GLIBC than the target rootfs. Debian
+13 (trixie) is a good cross-build rootfs because it provides the required
+development packages and GLIBC 2.41. Obtain one from the board vendor's Debian
+13 image/SDK, or create an architecture-matched trixie rootfs with
+`debootstrap` and install the development packages into it.
+
+RISC-V is the maintained default. Install its GCC 12 cross compiler:
+
+```sh
+sudo apt install -y gcc-12-riscv64-linux-gnu g++-12-riscv64-linux-gnu
+```
+
+Build against the existing RISC-V rootfs:
+
+```sh
+make build ARCH=riscv64 SYSROOT=/mnt/storage/riscv64-qemu-sysroot \
+  CROSS_GCC=/usr/bin/riscv64-linux-gnu-gcc-12 \
+  CROSS_GXX=/usr/bin/riscv64-linux-gnu-g++-12
+```
+
+Arm64 is the supported alternative. Its matching compiler and included profile
+are used with the same type of development rootfs:
+
+```sh
+sudo apt install -y gcc-12-aarch64-linux-gnu g++-12-aarch64-linux-gnu
+make build ARCH=arm64 SYSROOT=/path/to/arm64-development-rootfs
+```
+
+The build verifies the rootfs headers and multiarch libraries, derives the
+maximum supported GLIBC version from its `libc.so.6`, and rejects incompatible
+binaries. Output is written to:
+
+```text
+out/<profile-output-directory>/matter-temperature-humidity-sensor
+```
+
+Without `OUTPUT_DIR` in a profile, the output directory is
+`out/linux-<DEBIAN_ARCH>`. RISC-V builds temporarily apply the project’s CHIP
+toolchain patch; verify that lifecycle with:
+
+```sh
+make test-riscv64 SYSROOT=/path/to/riscv64-development-rootfs
+```
+
 ## Sensor integration
 
 The simplest integration is an executable configured by `sensor_command`. It
@@ -115,184 +167,58 @@ Implement `SensorProvider::Read`, return a validated `SensorReading`, and
 select the new provider in `src/main.cpp`. Normal sensor ports do not need to
 change `MatterReporter.cpp`.
 
-## Cross builds with an external development sysroot
+## Platforms
 
-Install the cross compiler selected by the architecture profile. The target
-sysroot must come from the exact board image, vendor SDK, or distribution build
-environment used for deployment. It must contain target development headers and
-libraries, not only the runtime root filesystem.
+A platform is a hardware-board-specific integration layer. It supplies the
+sensor acquisition, firmware, deployment, service configuration, and
+diagnostics needed for one board while the Matter application remains generic.
 
-```sh
-# arm64
-sudo apt install -y gcc-12-aarch64-linux-gnu g++-12-aarch64-linux-gnu
+### LicheeRV Nano (SG2002)
 
-# armhf
-sudo apt install -y gcc-12-arm-linux-gnueabihf g++-12-arm-linux-gnueabihf
-```
-
-Build by naming the profile and the external sysroot:
-
-```sh
-make build ARCH=arm64 SYSROOT=/opt/board-sdk/sysroot
-
-# Or:
-make build ARCH=armhf SYSROOT=/opt/board-sdk/sysroot
-
-# riscv64 with an existing sysroot and GCC 12 cross compiler
-make build ARCH=riscv64 SYSROOT=/mnt/storage/riscv64-qemu-sysroot \
-  CROSS_GCC=/usr/bin/riscv64-linux-gnu-gcc-12 \
-  CROSS_GXX=/usr/bin/riscv64-linux-gnu-g++-12
-```
-
-The cross-build script verifies the supplied sysroot has the target include and
-multiarch library directories, then derives its GLIBC ceiling from target
-`libc.so.6`. It rejects a binary requiring a newer GLIBC version.
-
-The result is placed at:
-
-```text
-out/<profile-output-directory>/matter-temperature-humidity-sensor
-```
-
-Without `OUTPUT_DIR` in the profile, the output directory is
-`out/linux-<DEBIAN_ARCH>`.
-
-Equivalent direct command:
-
-```sh
-./scripts/build-debian.sh arm64 /opt/board-sdk/sysroot
-```
-
-The older `build-debian12-arm64.sh` script remains as an arm64 compatibility
-wrapper and also requires an existing sysroot.
-
-The parent-owned connectedhomeip RISC-V toolchain patch is applied only for a
-`riscv64` build and automatically reversed afterward. Exercise that lifecycle
-with an external RISC-V development sysroot:
-
-```sh
-make test-riscv64 SYSROOT=/path/to/riscv64-development-sysroot
-```
-
-## SG2002 Debian 13 preparation
-
-The SG2002 SHT31 integration is an external command backend in
-[`platforms/sg2002`](platforms/sg2002). It adds BusyBox `devmem`, RTC register
-handling, an I2C3 systemd drop-in, and board-specific deployment guidance
-without changing the generic application.
-
-There is no SG2002 build profile or build flag. Build the standard Linux
-`riscv64` binary. Install it with the generic remote installer, then install
-the SG2002 platform payload:
-
-```sh
-make build ARCH=riscv64 SYSROOT=/path/to/riscv64-sysroot
-./deploy/deploy-main-program-over-ssh.sh 192.168.28.48
-make platform PLATFORM=sg2002
-./platforms/sg2002/deploy-sg2002-platform-over-ssh.sh 192.168.28.48
-```
-
-The SG2002 configuration sets `sensor_command` to `read-rtc-info.sh`; other
-deployments can use the same binary with any executable that emits the standard
-sensor JSON. The platform guide documents production SHT31 firmware, fixed
-debug readings, the optional GPIO bridge benchmark, and I2C3 handoff.
-
-## Porting guide
-
-### Add an architecture already supported by CHIP Linux GN
-
-CHIP's supplied Linux GN toolchains support `x64`, `x86`, `arm`, and `arm64`.
-This repository also adds Linux `riscv64` support to its connectedhomeip
-submodule through
-`patches/connectedhomeip/0001-add-linux-riscv64-gcc-toolchain.patch`. The
-build script applies this patch only for the riscv64 profile and reverses it
-after the build, so the submodule remains at its upstream revision. For one of
-these, create
-`build-profiles/<profile>.conf` by copying `arm64.conf`, `armhf.conf`,
-or `riscv64.conf`:
-
-```sh
-DEBIAN_ARCH=armhf
-GN_TARGET_CPU=arm
-GNU_TRIPLET=arm-linux-gnueabihf
-DEBIAN_MULTIARCH=arm-linux-gnueabihf
-GCC_VERSION=12
-```
-
-| Field | Meaning |
-| --- | --- |
-| `DEBIAN_ARCH` | Target Debian architecture; used for default output naming. |
-| `GN_TARGET_CPU` | CHIP GN CPU identifier. |
-| `GNU_TRIPLET` | Prefix of the Ubuntu cross compiler binaries. |
-| `DEBIAN_MULTIARCH` | Debian sysroot include and library directory name. |
-| `GCC_VERSION` | Required host cross-compiler version. |
-| `OUTPUT_DIR` | Optional output directory suffix; used by external sysroots. |
-| `GLIBC_MAX_VERSION` | Optional deployment GLIBC ceiling; otherwise derived from the supplied sysroot. |
-
-Install the matching compiler and obtain a development sysroot, then run:
-
-```sh
-make build ARCH=<profile> SYSROOT=/path/to/target-development-sysroot
-```
-
-The build never creates or modifies the sysroot.
-
-### Add a completely new CPU family
-
-First confirm that CHIP's Linux SDK supports the desired CPU family. A CPU
-family outside the repository's existing `x64`, `x86`, `arm`, `arm64`, and
-`riscv64` Linux GN support requires a connectedhomeip build port, not merely a
-new project profile. Then:
-
-1. Add the architecture profile described above.
-2. Add a matching GNU toolchain target in
-   `third_party/connectedhomeip/build/toolchain/linux/BUILD.gn`.
-3. Ensure the new GN toolchain uses the profile's `GNU_TRIPLET`.
-4. Map the architecture to a supported `GN_TARGET_CPU`, or extend CHIP's build
-   configuration for the new CPU.
-5. Obtain an external development sysroot for the target.
-6. Run `make build ARCH=<profile> SYSROOT=/path/to/target-development-sysroot`.
-7. Confirm the result using `file` and `readelf --version-info`; its highest
-   `GLIBC_*` requirement must not exceed the target sysroot's `libc.so.6`.
+The Sipeed LicheeRV Nano is a compact RISC-V single-board computer based on
+the Sophgo SG2002. Its SHT31 integration uses the RTC-domain 8051 and I2C3;
+see the [SG2002 platform guide](platforms/sg2002/README.md) for deployment,
+wiring, and troubleshooting.
 
 ## Deploy
 
-Deployment has two layers:
+Deployment uses two host-side scripts over SSH: the generic application
+deployer owns the Matter binary and base service, while the platform deployer
+owns board-specific acquisition and service integration.
 
-1. Install the generic Matter application and its standard systemd service.
-2. Install a platform sensor command and its matching configuration before
-   enabling the service.
-
-On the running target, install the generic binary and service:
-
-```sh
-sudo useradd --system \
-  --home /var/lib/matter-temperature-humidity-sensor \
-  --shell /usr/sbin/nologin \
-  matter-sensor
-sudo install -D -m 0755 /path/to/matter-temperature-humidity-sensor \
-  /usr/local/bin/matter-temperature-humidity-sensor
-sudo install -m 0644 deploy/matter-temperature-humidity-sensor.service \
-  /etc/systemd/system/
-sudo systemctl daemon-reload
-```
-
-The service passes `--KVS /var/lib/matter-temperature-humidity-sensor/chip-kvs`
-so Matter fabric credentials persist across restarts and reboots.
-
-For a generic command sensor, copy its executable and install a configuration
-at `/etc/matter-temperature-humidity-sensor.conf` based on
-`runtime-config/sensor.conf.example`. Then enable the service:
+For a LicheeRV Nano running Debian 13, first build the RISC-V application and
+the SG2002 platform artifacts:
 
 ```sh
-sudo systemctl enable --now matter-temperature-humidity-sensor
+make build ARCH=riscv64 SYSROOT=/path/to/riscv64-development-rootfs
+make platform PLATFORM=sg2002
 ```
 
-For SG2002, install the generic application first, then follow the
-[`platforms/sg2002`](platforms/sg2002) guide. The platform installer adds a
-drop-in that grants `CAP_SYS_RAWIO`, prepares I2C3, and loads SHT31 firmware.
+Then deploy in this order:
+
+```sh
+./deploy/deploy-main-program-over-ssh.sh 192.168.28.48
+./platforms/sg2002/deploy-sg2002-platform-over-ssh.sh 192.168.28.48
+```
+
+Pass a different already-built application binary as the second argument to
+`deploy-main-program-over-ssh.sh` when it is not at
+`out/linux-riscv64/matter-temperature-humidity-sensor`.
+
+`deploy-main-program-over-ssh.sh` installs the Matter binary, its base systemd
+unit, runtime dependencies, and the `matter-sensor` service account. It keeps
+the Matter KVS under `/var/lib/matter-temperature-humidity-sensor/chip-kvs`
+for persistent commissioning state.
+
+`deploy-sg2002-platform-over-ssh.sh` requires the generic deployment first. It
+transfers the prebuilt SHT31 and fixed-reading firmware images, the 8051
+loader, RTC reader, configuration, and platform diagnostics. It adds the
+SG2002 systemd drop-in that grants raw-MMIO access, hands I2C3 to the 8051,
+configures GPIOP20, and loads the production SHT31 firmware when the service
+starts.
+
+Both scripts connect as `root` to the target. The SG2002 platform deployer
+expects a Debian 13 riscv64 board.
 
 The target network must permit IPv6 and mDNS/DNS-SD between the controller and
-the device. Live-sensor and controller end-to-end validation remains dependent
-on the production sensor command; the deterministic stub and unit tests cover
-the provider behavior in the meantime.
+the device for Matter commissioning and Home Assistant connectivity.
