@@ -10,6 +10,8 @@ g++ -std=c++17 -Wall -Wextra -Werror -pedantic -pthread \
     -I"$project_root/include" \
     "$project_root/src/SensorReading.cpp" \
     "$project_root/src/CommandJsonSensorProvider.cpp" \
+    "$project_root/src/SensorPoller.cpp" \
+    "$project_root/src/SensorReadingFilter.cpp" \
     "$project_root/tests/SensorProviderTest.cpp" \
     -o "$output_dir/sensor-provider-test"
 (cd "$project_root" && "$output_dir/sensor-provider-test")

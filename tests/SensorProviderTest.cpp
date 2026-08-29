@@ -1,7 +1,9 @@
 #include "CommandJsonSensorProvider.h"
 #include "SensorReading.h"
+#include "SensorReadingFilter.h"
 
 #include <chrono>
+#include <cmath>
 #include <cstdlib>
 #include <iostream>
 #include <string>
@@ -26,6 +28,15 @@ void RequireParse(const std::string & json, int16_t temperature, uint16_t humidi
     Require(reading.HumidityCentiPercent() == humidity, "humidity conversion");
 }
 
+void RequireFilter(matter_sensor::SensorReadingFilter & filter, const matter_sensor::SensorReading & sample,
+                   bool expectedPublish, double expectedTemperature, double expectedHumidity)
+{
+    matter_sensor::SensorReading filtered{};
+    Require(filter.ShouldPublish(sample, filtered) == expectedPublish, "unexpected report decision");
+    Require(std::abs(filtered.temperatureCelsius - expectedTemperature) < 0.000001, "filtered temperature");
+    Require(std::abs(filtered.humidityPercent - expectedHumidity) < 0.000001, "filtered humidity");
+}
+
 } // namespace
 
 int main()
@@ -46,6 +57,12 @@ int main()
     Require(stub.Read(reading, error), error);
     Require(reading.TemperatureCentiDegrees() == 2345 && reading.HumidityCentiPercent() == 5678,
             "stub command measurement");
+
+    matter_sensor::SensorReadingFilter filter;
+    RequireFilter(filter, { 20.0, 50.0 }, true, 20.0, 50.0);
+    RequireFilter(filter, { 20.08, 50.08 }, false, 20.04, 50.04);
+    RequireFilter(filter, { 20.40, 50.08 }, true, 20.24, 50.08);
+    RequireFilter(filter, { 20.40, 50.40 }, true, 20.40, 50.24);
 
     matter_sensor::CommandJsonSensorProvider failed({ "/bin/sh", "-c", "exit 2" }, std::chrono::seconds(1), 128);
     Require(!failed.Read(reading, error), "nonzero command exit must fail");

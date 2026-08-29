@@ -13,7 +13,8 @@ sudo journalctl -u matter-temperature-humidity-sensor -b --no-pager -n 100
 
 The service should be `active (running)`. If a pre-start command failed, the
 journal identifies whether I2C3 preparation, GPIOP20 pinmux, or 8051 firmware
-loading failed.
+loading failed. The service writes all application diagnostics to the systemd
+journal; it does not create dedicated log files.
 
 ### Observe the optional GPIOP20 heartbeat LED
 

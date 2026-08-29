@@ -18,11 +18,13 @@ executable("matter-temperature-humidity-sensor") {
     "//include/SensorPoller.h",
     "//include/SensorProvider.h",
     "//include/SensorReading.h",
+    "//include/SensorReadingFilter.h",
     "//src/CommandJsonSensorProvider.cpp",
     "//src/Config.cpp",
     "//src/MatterReporter.cpp",
     "//src/SensorPoller.cpp",
     "//src/SensorReading.cpp",
+    "//src/SensorReadingFilter.cpp",
     "//src/main.cpp",
   ]
 

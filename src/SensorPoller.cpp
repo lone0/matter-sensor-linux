@@ -1,5 +1,8 @@
 #include "SensorPoller.h"
 
+#include <iomanip>
+#include <iostream>
+#include <sstream>
 #include <string>
 
 namespace matter_sensor {
@@ -44,7 +47,23 @@ void SensorPoller::Run()
         std::string error;
         if (mProvider.Read(reading, error))
         {
-            mOnReading(reading);
+            SensorReading filteredReading{};
+            if (mReadingFilter.ShouldPublish(reading, filteredReading))
+            {
+                mOnReading(filteredReading);
+            }
+            else
+            {
+                const SensorReading & lastSubmitted = *mReadingFilter.LastSubmitted();
+                std::ostringstream log;
+                log << std::fixed << std::setprecision(2) << "Skip: average=" << filteredReading.temperatureCelsius
+                    << "°C/" << filteredReading.humidityPercent << "% last-submitted="
+                    << lastSubmitted.temperatureCelsius << "°C/" << lastSubmitted.humidityPercent << "% delta="
+                    << std::showpos
+                    << filteredReading.temperatureCelsius - lastSubmitted.temperatureCelsius << "°C/"
+                    << filteredReading.humidityPercent - lastSubmitted.humidityPercent << "%" << std::noshowpos;
+                std::clog << log.str() << std::endl;
+            }
         }
         else
         {

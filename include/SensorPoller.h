@@ -1,6 +1,7 @@
 #pragma once
 
 #include "SensorProvider.h"
+#include "SensorReadingFilter.h"
 
 #include <atomic>
 #include <chrono>
@@ -34,6 +35,7 @@ private:
     std::mutex mWaitMutex;
     std::condition_variable mWaitCondition;
     std::thread mThread;
+    SensorReadingFilter mReadingFilter;
 };
 
 } // namespace matter_sensor
