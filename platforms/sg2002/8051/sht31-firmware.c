@@ -6,6 +6,7 @@
  */
 
 typedef unsigned char uint8_t;
+typedef signed char int8_t;
 typedef signed int int16_t;
 typedef unsigned int uint16_t;
 typedef unsigned long uint32_t;
@@ -70,6 +71,7 @@ typedef unsigned long uint32_t;
 #define STATUS_I2C_ERROR 0x49324321UL /* "I2C!" */
 #define STATUS_CRC_ERROR 0x43524321UL /* "CRC!" */
 #define STATUS_RANGE_ERROR 0x524E4721UL /* "RNG!" */
+#define STATUS_DEBOUNCE 0x44454221UL /* "DEB!" */
 
 __sfr __at (0xE4) r51_rd0;
 __sfr __at (0xE5) r51_rd1;
@@ -88,6 +90,10 @@ __sfr __at (0xFB) r51_addr3;
 __sbit __at (0xAF) ea;
 
 static uint32_t i2c_error_detail;
+static uint16_t last_raw_temperature;
+static uint16_t last_raw_humidity;
+static int8_t temperature_direction;
+static int8_t humidity_direction;
 
 static void robot_write(uint32_t address, uint32_t value);
 
@@ -274,6 +280,38 @@ static uint8_t sht31_read(uint8_t bytes[6])
     return i2c_read_frame(bytes);
 }
 
+static uint16_t u16_abs_diff(uint16_t a, uint16_t b)
+{
+    return (a >= b) ? (uint16_t)(a - b) : (uint16_t)(b - a);
+}
+
+static uint8_t debounce_filter(uint16_t raw_temperature, uint16_t raw_humidity, uint16_t last_raw_temperature, uint16_t last_raw_humidity)
+{
+    int8_t t_direction = 0;
+    int8_t h_direction = 0;
+
+    if (u16_abs_diff(raw_temperature, last_raw_temperature) < 10 || u16_abs_diff(raw_humidity, last_raw_humidity) < 10)
+        //filtered out by debounce filter
+        return 1;
+
+    t_direction = (raw_temperature > last_raw_temperature) ? 1 : -1;
+    if (t_direction > 0 && temperature_direction>2)
+        return 0;
+    else if (t_direction < 0 && temperature_direction<-2)
+        return 0;
+
+    temperature_direction += t_direction;
+
+    h_direction = (raw_humidity > last_raw_humidity) ? 1 : -1;
+    if (h_direction > 0 && humidity_direction>2)
+        return 0;
+    else if (h_direction < 0 && humidity_direction<-2)
+        return 0;
+
+    humidity_direction += h_direction;
+    return 1;
+}
+
 static uint8_t publish_reading(const uint8_t bytes[6], uint32_t *sequence)
 {
     uint16_t raw_temperature;
@@ -293,13 +331,17 @@ static uint8_t publish_reading(const uint8_t bytes[6], uint32_t *sequence)
 
     raw_temperature = ((uint16_t) bytes[0] << 8) | bytes[1];
     raw_humidity = ((uint16_t) bytes[3] << 8) | bytes[4];
-    temperature = (int16_t) (((uint32_t) raw_temperature * 17500UL + 32767UL) / 65535UL) - 4500;
-    humidity = (uint16_t) (((uint32_t) raw_humidity * 10000UL + 32767UL) / 65535UL);
-    if (temperature < -4000 || temperature > 12500 || humidity > 10000U) {
-        robot_write(RTC_INFO1, 0);
-        robot_write(RTC_INFO0, STATUS_RANGE_ERROR);
+    if (debounce_filter(raw_temperature, raw_humidity, last_raw_temperature, last_raw_humidity)) {
+        //filtered out by debounce filter
+        robot_write(RTC_INFO0, STATUS_DEBOUNCE);
+        packed = ((uint32_t) temperature_direction << 16) | (uint32_t)humidity_direction;
+        robot_write(RTC_INFO1, packed);
+        delay_ms(1000);
         return 0;
     }
+
+    temperature = (int16_t) (((uint32_t) raw_temperature * 17500UL + 32767UL) / 65535UL) - 4500;
+    humidity = (uint16_t) (((uint32_t) raw_humidity * 10000UL + 32767UL) / 65535UL);
 
     packed = ((uint32_t) humidity << 16) | (uint16_t) temperature;
     robot_write(RTC_INFO2, packed);
@@ -310,6 +352,8 @@ static uint8_t publish_reading(const uint8_t bytes[6], uint32_t *sequence)
     robot_write(RTC_INFO3, *sequence);
     robot_write(RTC_INFO1, 0);
     robot_write(RTC_INFO0, STATUS_READY);
+    last_raw_temperature = raw_temperature;
+    last_raw_humidity = raw_humidity;
     return 1;
 }
 
@@ -326,12 +370,13 @@ void main(void)
     for (;;) {
         i2c_error_detail = 0;
         gpio_write(LED_GPIO_BASE, LED_GPIO_PIN, led_on);
-        led_on = (uint8_t) !led_on;
+        
         if (!sht31_read(bytes)) {
             robot_write(RTC_INFO1, i2c_error_detail);
             robot_write(RTC_INFO0, STATUS_I2C_ERROR);
         } else {
-            publish_reading(bytes, &sequence);
+            if (publish_reading(bytes, &sequence))
+                led_on = (uint8_t) !led_on;
         }
         delay_ms(1000);
     }

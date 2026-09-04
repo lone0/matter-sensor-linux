@@ -10,6 +10,7 @@ readonly status_sht31_ready=0x4932434f
 readonly status_sht31_i2c_error=0x49324321
 readonly status_sht31_crc_error=0x43524321
 readonly status_sht31_range_error=0x524e4721
+readonly status_sht31_debounce=0x44454221
 readonly status_fake=0x46414b45
 readonly status_benchmark_running=0x424d524e
 readonly status_benchmark_complete=0x424d4f4b
@@ -116,7 +117,20 @@ else
                 "$((measurement >> 16))" "$((measurement & 0xffff))"
             ;;
         "$((status_sht31_range_error))")
-            echo "Firmware: SHT31 converted reading is out of range (RNG!)."
+            echo "Firmware: SHT31 converted reading is outside its valid range (RNG!)."
+            ;;
+        "$((status_sht31_debounce))")
+            echo "Firmware: SHT31 reading filtered by debounce logic (DEB!)."
+            temperature_direction=$((detail >> 16))
+            humidity_direction=$((detail & 0xffff))
+            if ((temperature_direction >= 0x8000)); then
+                temperature_direction=$((temperature_direction - 0x10000))
+            fi
+            if ((humidity_direction >= 0x8000)); then
+                humidity_direction=$((humidity_direction - 0x10000))
+            fi
+            printf 'Temperature direction: %d, humidity direction: %d\n' \
+                "$temperature_direction" "$humidity_direction"
             ;;
         "$((status_benchmark_running))")
             echo "Firmware: GPIO bridge benchmark running (BMRN)."

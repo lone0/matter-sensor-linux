@@ -28,8 +28,8 @@ bool SensorReadingFilter::ShouldPublish(const SensorReading & sample, SensorRead
     mLastSample = sample;
 
     const bool temperatureChanged =
-        std::abs(averaged.temperatureCelsius - mLastSubmitted->temperatureCelsius) > kTemperatureAccuracy/4;
-    const bool humidityChanged = std::abs(averaged.humidityPercent - mLastSubmitted->humidityPercent) > kHumidityAccuracy/4;
+        std::abs(averaged.temperatureCelsius - mLastSubmitted->temperatureCelsius) > kTemperatureAccuracy/10;
+    const bool humidityChanged = std::abs(averaged.humidityPercent - mLastSubmitted->humidityPercent) > kHumidityAccuracy/10;
     if (!temperatureChanged && !humidityChanged)
     {
         return false;
