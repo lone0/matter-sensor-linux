@@ -124,11 +124,13 @@ The simplest integration is an executable configured by `sensor_command`. It
 must exit successfully and write exactly one object to stdout:
 
 ```json
-{"temperature_c":23.45,"humidity_percent":56.78}
+{"temperature_c":23.45,"humidity_percent":56.78,"sequence":1}
 ```
 
 Diagnostics belong on stderr, not stdout. Temperature must be finite and within
 `-273.15..327.67` C; humidity must be finite and within `0..100` percent.
+An optional `sequence` field can be included so the Linux poller can tell when
+the sensor has published a fresh reading versus repeating the last one.
 
 ```ini
 sensor_command=/usr/local/libexec/read-temperature-humidity

@@ -56,4 +56,5 @@ if ((temperature < -27315 || humidity > 10000)); then
     exit 1
 fi
 
-printf '{"temperature_c":%s,"humidity_percent":%s}\n' "$(format_centi "$temperature")" "$(format_centi "$humidity")"
+printf '{"temperature_c":%s,"humidity_percent":%s,"sequence":%u}\n' \
+    "$(format_centi "$temperature")" "$(format_centi "$humidity")" "$sequence_after"

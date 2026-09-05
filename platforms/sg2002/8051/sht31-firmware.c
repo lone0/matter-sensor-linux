@@ -295,20 +295,16 @@ static uint8_t debounce_filter(uint16_t raw_temperature, uint16_t raw_humidity, 
         return 1;
 
     t_direction = (raw_temperature > last_raw_temperature) ? 1 : -1;
-    if (t_direction > 0 && temperature_direction>2)
+    if ((t_direction > 0 && temperature_direction > 1) ||
+        (t_direction < 0 && temperature_direction < -1))
         return 0;
-    else if (t_direction < 0 && temperature_direction<-2)
-        return 0;
-
-    temperature_direction += t_direction;
 
     h_direction = (raw_humidity > last_raw_humidity) ? 1 : -1;
-    if (h_direction > 0 && humidity_direction>2)
-        return 0;
-    else if (h_direction < 0 && humidity_direction<-2)
+    if ((h_direction > 0 && humidity_direction > 1) ||
+        (h_direction < 0 && humidity_direction < -1))
         return 0;
 
-    humidity_direction += h_direction;
+    temperature_direction += t_direction;    humidity_direction += h_direction;
     return 1;
 }
 
@@ -336,7 +332,7 @@ static uint8_t publish_reading(const uint8_t bytes[6], uint32_t *sequence)
         robot_write(RTC_INFO0, STATUS_DEBOUNCE);
         packed = ((uint32_t) temperature_direction << 16) | (uint32_t)humidity_direction;
         robot_write(RTC_INFO1, packed);
-        delay_ms(1000);
+        delay_ms(2000);
         return 0;
     }
 
@@ -370,13 +366,16 @@ void main(void)
     for (;;) {
         i2c_error_detail = 0;
         gpio_write(LED_GPIO_BASE, LED_GPIO_PIN, led_on);
-        
+        led_on = (uint8_t) !led_on;
         if (!sht31_read(bytes)) {
             robot_write(RTC_INFO1, i2c_error_detail);
             robot_write(RTC_INFO0, STATUS_I2C_ERROR);
         } else {
-            if (publish_reading(bytes, &sequence))
-                led_on = (uint8_t) !led_on;
+            if (publish_reading(bytes, &sequence)) {
+                gpio_write(LED_GPIO_BASE, LED_GPIO_PIN, led_on);
+                delay_ms(100);
+                gpio_write(LED_GPIO_BASE, LED_GPIO_PIN, !led_on);
+            }
         }
         delay_ms(1000);
     }

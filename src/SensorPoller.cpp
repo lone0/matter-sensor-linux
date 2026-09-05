@@ -47,6 +47,20 @@ void SensorPoller::Run()
         std::string error;
         if (mProvider.Read(reading, error))
         {
+            if (reading.publicationSequence.has_value() && mLastSequence.has_value() &&
+                reading.publicationSequence == mLastSequence)
+            {
+                std::clog << "Skip: stale RTC sequence=" << *reading.publicationSequence << " repeated"
+                          << std::endl;
+                std::unique_lock<std::mutex> lock(mWaitMutex);
+                mWaitCondition.wait_for(lock, mInterval, [this] { return mStopping.load(); });
+                continue;
+            }
+            if (reading.publicationSequence.has_value())
+            {
+                mLastSequence = reading.publicationSequence;
+            }
+
             SensorReading filteredReading{};
             if (mReadingFilter.ShouldPublish(reading, filteredReading))
             {

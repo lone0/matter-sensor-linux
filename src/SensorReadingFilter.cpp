@@ -5,8 +5,8 @@
 namespace matter_sensor {
 namespace {
 
-constexpr double kTemperatureAccuracy = 0.2;
-constexpr double kHumidityAccuracy = 2.0;
+constexpr double kTemperatureDeadband = 0.1;
+constexpr double kHumidityDeadband = 0.5;
 
 } // namespace
 
@@ -14,8 +14,8 @@ bool SensorReadingFilter::ShouldPublish(const SensorReading & sample, SensorRead
 {
     if (!mLastSample.has_value() || !mLastSubmitted.has_value())
     {
-        mLastSample    = sample;
-        mLastSubmitted = sample;
+        mLastSample     = sample;
+        mLastSubmitted  = sample;
         readingToPublish = sample;
         return true;
     }
@@ -23,13 +23,15 @@ bool SensorReadingFilter::ShouldPublish(const SensorReading & sample, SensorRead
     const SensorReading averaged{
         (sample.temperatureCelsius + mLastSample->temperatureCelsius) / 2.0,
         (sample.humidityPercent + mLastSample->humidityPercent) / 2.0,
+        std::nullopt,
     };
     readingToPublish = averaged;
     mLastSample = sample;
 
     const bool temperatureChanged =
-        std::abs(averaged.temperatureCelsius - mLastSubmitted->temperatureCelsius) > kTemperatureAccuracy/10;
-    const bool humidityChanged = std::abs(averaged.humidityPercent - mLastSubmitted->humidityPercent) > kHumidityAccuracy/10;
+        std::abs(averaged.temperatureCelsius - mLastSubmitted->temperatureCelsius) > kTemperatureDeadband;
+    const bool humidityChanged =
+        std::abs(averaged.humidityPercent - mLastSubmitted->humidityPercent) > kHumidityDeadband;
     if (!temperatureChanged && !humidityChanged)
     {
         return false;

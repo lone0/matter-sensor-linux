@@ -13,12 +13,13 @@ constexpr double kMaximumTemperatureCelsius = 327.67;
 constexpr double kMinimumHumidityPercent = 0.0;
 constexpr double kMaximumHumidityPercent = 100.0;
 const std::string kNumber = R"(([+-]?(?:(?:\d+(?:\.\d*)?)|(?:\.\d+))(?:[eE][+-]?\d+)?))";
+const std::string kSequence = R"(([0-9]+))";
 const std::regex kTemperatureThenHumidity(
     "^\\s*\\{\\s*\"temperature_c\"\\s*:\\s*" + kNumber + "\\s*,\\s*\"humidity_percent\"\\s*:\\s*" + kNumber +
-    "\\s*\\}\\s*$");
+    "(?:\\s*,\\s*\"sequence\"\\s*:\\s*" + kSequence + ")?\\s*\\}\\s*$");
 const std::regex kHumidityThenTemperature(
     "^\\s*\\{\\s*\"humidity_percent\"\\s*:\\s*" + kNumber + "\\s*,\\s*\"temperature_c\"\\s*:\\s*" + kNumber +
-    "\\s*\\}\\s*$");
+    "(?:\\s*,\\s*\"sequence\"\\s*:\\s*" + kSequence + ")?\\s*\\}\\s*$");
 
 bool ParseValue(const std::smatch & matches, bool temperatureFirst, SensorReading & reading, std::string & error)
 {
@@ -27,6 +28,17 @@ bool ParseValue(const std::smatch & matches, bool temperatureFirst, SensorReadin
         char * end       = nullptr;
         result           = std::strtod(value.c_str(), &end);
         return errno != ERANGE && end != value.c_str() && *end == '\0';
+    };
+    const auto parseSequence = [](const std::string & value, uint32_t & result) {
+        errno = 0;
+        char * end = nullptr;
+        const unsigned long raw = std::strtoul(value.c_str(), &end, 10);
+        if (errno == ERANGE || end == value.c_str() || *end != '\0' || raw > UINT32_MAX)
+        {
+            return false;
+        }
+        result = static_cast<uint32_t>(raw);
+        return true;
     };
 
     double first  = 0.0;
@@ -53,6 +65,17 @@ bool ParseValue(const std::smatch & matches, bool temperatureFirst, SensorReadin
     {
         error = "humidity_percent must be between 0 and 100";
         return false;
+    }
+    reading.publicationSequence.reset();
+    if (matches.size() >= 4 && matches[3].matched)
+    {
+        uint32_t sequence = 0;
+        if (!parseSequence(matches[3].str(), sequence))
+        {
+            error = "sequence must be an unsigned integer";
+            return false;
+        }
+        reading.publicationSequence = sequence;
     }
     return true;
 }

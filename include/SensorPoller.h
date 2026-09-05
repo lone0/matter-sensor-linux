@@ -8,6 +8,7 @@
 #include <condition_variable>
 #include <functional>
 #include <mutex>
+#include <optional>
 #include <thread>
 
 namespace matter_sensor {
@@ -36,6 +37,7 @@ private:
     std::condition_variable mWaitCondition;
     std::thread mThread;
     SensorReadingFilter mReadingFilter;
+    std::optional<uint32_t> mLastSequence;
 };
 
 } // namespace matter_sensor
